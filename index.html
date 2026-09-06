@@ -55,8 +55,6 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-button,input,select,textarea{-webkit-appearance:none;appearance:none}
-button{touch-action:manipulation}
 html{-webkit-text-size-adjust:100%}
 html,body{margin:0;padding:0;min-height:100%}
 html{background:#e9eef4}
@@ -134,10 +132,8 @@ header{
 .back{background:none;border:none;color:var(--accent);font-size:14px;padding:0;cursor:pointer;font-weight:500}
 
 /* ==================== ПОЛЯ И КНОПКИ ==================== */
-.row{display:flex;gap:8px;align-items:center;margin-top:9px;min-width:0}
-.row > *{min-width:0}
-.row > .btn{flex:1 1 0}
-.row.wrap-it{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.row{display:flex;gap:8px;align-items:center;margin-top:9px}
+.row.wrap-it{flex-wrap:wrap}
 select,input,textarea,button{font:inherit;color:inherit}
 select,input[type=text],input[type=date],input[type=number],input[type=tel],textarea{
   background:var(--glass-lo);
@@ -172,8 +168,6 @@ textarea{min-height:140px;resize:vertical;line-height:1.45}
 }
 .btn.wide{width:100%}
 .btn.danger{background:var(--bad-soft);color:var(--bad);border:.5px solid var(--bad);box-shadow:none}
-.btn{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:center}
-.iconbtn{overflow:hidden}
 .iconbtn:active,.btn:active,.mark:active,.lesson:active{transform:scale(.965);opacity:.85}
 
 /* ==================== КАРТОЧКИ ==================== */
@@ -198,7 +192,7 @@ li.yes{background:linear-gradient(90deg,var(--ok-soft),transparent 46%),var(--gl
 li.no{background:linear-gradient(90deg,var(--bad-soft),transparent 46%),var(--glass)}
 li.exc{background:linear-gradient(90deg,var(--warn-soft),transparent 46%),var(--glass)}
 
-.top{display:flex;align-items:center;gap:11px;min-width:0}
+.top{display:flex;align-items:center;gap:11px}
 .num{font-size:12px;color:var(--ink-dim);width:20px;flex:none;
   font-variant-numeric:tabular-nums;text-align:right}
 .fio{flex:1;min-width:0;font-size:15.5px;letter-spacing:-.012em}
@@ -291,7 +285,8 @@ nav button.on{color:var(--accent);background:var(--accent-soft);
 nav button:active{transform:scale(.94)}
 
 /* Зеркальный блик по кромке: имитация specular highlight */
-.card,li.card{position:relative}
+header,.card,li.card,.toast{position:relative}
+nav{position:fixed}
 header::after,nav::after,.card::after,li.card::after{
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
   background:linear-gradient(178deg,rgba(255,255,255,.5) 0%,rgba(255,255,255,.07) 26%,
@@ -337,9 +332,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 @media (max-width:379px){
   :root{--r:18px;--r-sm:12px}
   .htitle{font-size:19px}
-  header{padding:12px}
   .fio{font-size:14.5px}
-  .row{gap:6px}
   .mark{width:42px;height:42px}
   nav button{font-size:9.5px}
   nav button i{font-size:18px}
@@ -377,6 +370,13 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
   .bgfx span{opacity:.28}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ==================== БГТУ: РАСПИСАНИЕ ==================== */
+.bgtu-meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.bgtu-week{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.bgtu-week .btn.active{box-shadow:0 0 0 2px var(--accent-soft),inset 0 1px 0 rgba(255,255,255,.22)}
+.bgtu-source{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:9px 2px 0}
+@media (max-width:379px){.bgtu-week{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -393,7 +393,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 
 <script>
 /* ============================ ХРАНИЛИЩЕ ============================ */
-const APP_V = 7;
+const APP_V = 10;
 const KEY = 'starosta-o26-ist-sii-b';
 const store = {
   async get(k){
@@ -428,6 +428,12 @@ function fresh(){
     pays: {},             // pays[fundId][studentId] = число
     tpl: [],              // {id,dow,pair,subjectId,kind,room}
     duty: {idx:0, log:[]},// log: {date, studentId}
+    schedule: {
+      source:'БГТУ', year:'2026-2027', semester:1, form:'Очное',
+      faculty:'Факультет информационных технологий', education:'бакалавр',
+      code:'09.03.02', profile:'Системы искусственного интеллекта и обработка больших данных',
+      group:'О-26-ИСТ-СИИ-Б', week:'odd', importedAt:''
+    },
     limit: 3              // порог пропусков
   };
 }
@@ -513,6 +519,7 @@ function render(){
   if(view==='import') return app.innerHTML = viewImport();
   if(view==='dir') return app.innerHTML = viewDir();
   if(view==='tpl') return app.innerHTML = viewTpl();
+  if(view==='bgtu') return app.innerHTML = viewBGTU();
   if(tab==='pairs') app.innerHTML = viewPairs();
   if(tab==='works') app.innerHTML = viewWorks();
   if(tab==='money') app.innerHTML = viewMoney();
@@ -528,9 +535,10 @@ function head(title, sub, backTo){
 
 /* ---------- ПАРЫ ---------- */
 function viewPairs(){
+  ensureBGTULessonsForDate(curDate);
   const ls = lessonsOn(curDate);
   const d = dowOf(curDate);
-  let h = head('Пары', DOW[d]) + `
+  let h = head('Пары', `${DOW[d]} · БГТУ: ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя`) + `
     <div class="row">
       <button class="iconbtn" data-act="dshift" data-v="-1">‹</button>
       <input type="date" id="curDate" value="${curDate}">
@@ -550,7 +558,7 @@ function viewPairs(){
       <div class="lesson" data-act="openatt" data-id="${l.id}">
         <span class="pairno">${l.pair}</span>
         <span class="t"><b>${esc(subjName(l.subjectId))}</b>
-          <span>${esc(l.kind||'')}${l.room?' · ауд. '+esc(l.room):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
+          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${l.room?' · ауд. '+esc(l.room):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
         <span class="chip ${n?'bad':'ok'}">${n} Н</span>
         ${u?`<span class="chip warn">${u} У</span>`:''}
       </div>
@@ -808,6 +816,8 @@ function viewMore(){
         <span>${S.teachers.length} шт.</span></span><span>›</span></div></li>
       <li class="card"><div class="lesson" data-act="gotpl"><span class="t"><b>Шаблон недели</b>
         <span>${S.tpl.length} пар в шаблоне</span></span><span>›</span></div></li>
+      <li class="card"><div class="lesson" data-act="gobgtu"><span class="t"><b>Расписание БГТУ</b>
+        <span>${esc((S.schedule&&S.schedule.group)||'О-26-ИСТ-СИИ-Б')} · ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя</span></span><span>›</span></div></li>
     </ul>
     <h2>Выгрузка</h2>
     <div class="row wrap-it">
@@ -828,6 +838,178 @@ function viewMore(){
     <p class="hint">Версия ${APP_V}</p>
     <div style="height:20px"></div>`;
 }
+
+function pairFromTime(time){
+  const m = String(time||'').match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return 0;
+  const mins = (+m[1])*60 + (+m[2]);
+  const starts = [480,585,690,800,905,1010,1120,1210];
+  const ix = starts.indexOf(mins);
+  return ix>=0 ? ix+1 : 0;
+}
+
+function bgtuWeekLabel(w){ return w==='even'?'чётная':'нечётная'; }
+function bgtuTpls(week){
+  return (S.tpl||[]).filter(t=>t.source==='bgtu' && (t.week||'odd')===week);
+}
+function bgtuCurrentWeekForDate(iso){
+  const dow = dowOf(iso);
+  const candidates = bgtuTpls(S.schedule?.week==='even'?'even':'odd').filter(t=>t.dow===dow);
+  return candidates.length ? (S.schedule?.week||'odd') : (S.schedule?.week||'odd');
+}
+
+function ensureBGTULessonsForDate(iso){
+  const week = S.schedule?.week==='even'?'even':'odd';
+  const dow = dowOf(iso);
+  const rows = bgtuTpls(week).filter(t=>t.dow===dow).sort((a,b)=>(a.pair||99)-(b.pair||99));
+  if(!rows.length) return 0;
+  let made=0;
+  for(const t of rows){
+    const exists=S.lessons.some(l=>l.date===iso && l.source==='bgtu' && l.pair===t.pair && l.week===week);
+    if(exists) continue;
+    S.lessons.push({id:uid('l'),date:iso,pair:t.pair,subjectId:t.subjectId,kind:t.kind||'',room:t.room||'',teacherId:t.teacherId||'',week,time:t.time||'',source:'bgtu'});
+    made++;
+  }
+  if(made) save();
+  return made;
+}
+
+function applyBGTUSchedule(data){
+  const rows=Array.isArray(data?.lessons)?data.lessons:[];
+  if(!rows.length) throw new Error('БГТУ вернуло пустое расписание');
+
+  // Удаляем только ранее импортированные БГТУ-шаблоны. Ручные шаблоны пользователя не трогаем.
+  S.tpl=(S.tpl||[]).filter(t=>t.source!=='bgtu');
+
+  // Удаляем только будущие неотмеченные автоматически созданные БГТУ-занятия,
+  // чтобы обновление действительно отражалось в календаре, не ломая историю посещаемости.
+  const today=todayISO();
+  S.lessons=(S.lessons||[]).filter(l=>{
+    if(l.source!=='bgtu' || l.date<today) return true;
+    const hasMarks=Object.keys(S.att[l.id]||{}).length>0;
+    return hasMarks;
+  });
+
+  const subjectMap=new Map();
+  const teacherMap=new Map();
+  for(const p of (S.subjects||[])) subjectMap.set(norm(p.name),p);
+  for(const t of (S.teachers||[])) teacherMap.set(norm(t.fio),t);
+
+  let made=0, addedSubjects=0, addedTeachers=0;
+  const seen=new Set();
+  for(const r of rows){
+    const week=r.week==='even'?'even':'odd';
+    const subject=String(r.subject||'').trim();
+    if(!subject || !r.dow || !r.time) continue;
+    let p=subjectMap.get(norm(subject));
+    if(!p){
+      p={id:uid('p'),name:subject,control:'',teacherId:''};
+      S.subjects.push(p); subjectMap.set(norm(subject),p); addedSubjects++;
+    }
+    let t=null;
+    const teacher=String(r.teacher||'').trim();
+    if(teacher){
+      t=teacherMap.get(norm(teacher));
+      if(!t){
+        t={id:uid('t'),fio:teacher,dept:'',contact:'',note:''};
+        S.teachers.push(t); teacherMap.set(norm(teacher),t); addedTeachers++;
+      }
+    }
+    const key=[week,r.dow,r.time,norm(subject),norm(r.kind||''),norm(teacher),norm(r.room||'')].join('|');
+    if(seen.has(key)) continue;
+    seen.add(key);
+    const pair=+r.pair||pairFromTime(r.time)||1;
+    S.tpl.push({
+      id:uid('x'),source:'bgtu',group:S.schedule.group,week,dow:+r.dow,pair,
+      subjectId:p.id,kind:String(r.kind||'').trim(),room:String(r.room||'').trim(),
+      teacherId:t?t.id:'',time:String(r.time||'').trim()
+    });
+    made++;
+  }
+
+  S.schedule.lastSyncAt=new Date().toLocaleString('ru-RU');
+  S.schedule.currentWeek=data.currentWeek==='even'?'even':'odd';
+  S.schedule.week=S.schedule.currentWeek;
+  S.schedule.lastError='';
+  S.schedule.remote=data.source||'БГТУ';
+
+  ensureBGTULessonsForDate(curDate);
+  save();
+  render();
+  toast(`Расписание обновлено: ${made}`);
+  return {made,addedSubjects,addedTeachers};
+}
+
+async function syncBGTU(){
+  if(ctx.bgtuBusy) return;
+  ctx.bgtuBusy=true;
+  ctx.bgtuError='';
+  render();
+  try{
+    const q=new URLSearchParams({
+      group:S.schedule?.group||'О-26-ИСТ-СИИ-Б',
+      faculty:S.schedule?.faculty||'Факультет информационных технологий',
+      level:S.schedule?.education||'бакалавр',
+      period:`${S.schedule?.year||'2026-2027'}_${S.schedule?.semester||1}_1`,
+      form:'очная',
+      week:'all'
+    });
+    const ac=new AbortController();
+    const timer=setTimeout(()=>ac.abort(),20000);
+    const res=await fetch(`/api/bgtu/schedule?${q.toString()}`,{method:'GET',cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
+    clearTimeout(timer);
+    let data=null;
+    try{ data=await res.json(); }catch(e){ throw new Error(`Сервер вернул не JSON (${res.status})`); }
+    if(!res.ok || !data.ok) throw new Error(data?.error||`Ошибка сервера: ${res.status}`);
+    applyBGTUSchedule(data);
+  }catch(e){
+    ctx.bgtuError=e?.name==='AbortError'?'БГТУ не ответил за 20 секунд.':(e?.message||'Не удалось обновить расписание');
+    if(S.schedule) S.schedule.lastError=ctx.bgtuError;
+    save(); render();
+    toast('Не удалось обновить расписание');
+  }finally{
+    ctx.bgtuBusy=false;
+  }
+}
+
+function viewBGTU(){
+  const m=S.schedule||{};
+  const odd=bgtuTpls('odd').length, even=bgtuTpls('even').length;
+  const hasData=odd||even;
+  let h=head('Расписание БГТУ','автоматическая синхронизация · официальные данные',1)+`</header>`;
+  h+=`<div class="card">
+    <div class="fio"><b>${esc(m.group||'О-26-ИСТ-СИИ-Б')}</b></div>
+    <p class="bgtu-source">${esc(m.profile||'Системы искусственного интеллекта и обработка больших данных')} · ${esc(m.code||'09.03.02')} · ${esc(m.form||'Очное')}</p>
+    <div class="bgtu-meta">
+      <span class="chip">${esc(m.year||'2026-2027')}</span>
+      <span class="chip">${m.semester||1} семестр</span>
+      <span class="chip">${esc(m.education||'бакалавр')}</span>
+    </div>
+    <div class="bgtu-week">
+      <button class="btn ghost ${m.week==='odd'?'active':''}" data-act="setweek" data-v="odd">Нечётная</button>
+      <button class="btn ghost ${m.week==='even'?'active':''}" data-act="setweek" data-v="even">Чётная</button>
+    </div>
+    <div class="row"><button class="btn wide" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled':''}>${ctx.bgtuBusy?'Обновляю…':'↻ Обновить расписание'}</button></div>
+    ${m.lastSyncAt?`<p class="bgtu-source">Последнее обновление: ${esc(m.lastSyncAt)}</p>`:'<p class="bgtu-source">Расписание ещё не синхронизировано.</p>'}
+    ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}
+    ${(ctx.bgtuError||m.lastError)?`<div class="card"><p class="hint" style="color:var(--bad)">${esc(ctx.bgtuError||m.lastError)}<br><span style="color:var(--ink-soft)">Проверь, что сервер приложения запущен и есть доступ к интернету.</span></p></div>`:''}
+  </div>`;
+  h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||'О-26-ИСТ-СИИ-Б')}. Сервер сам получает список групп и затем расписание БГТУ. Нечётная и чётная недели хранятся отдельно.</p></div>`;
+  if(hasData){
+    const rows=(m.week==='even'?bgtuTpls('even'):bgtuTpls('odd')).sort((a,b)=>a.dow-b.dow || a.pair-b.pair);
+    h+=`<h2>${bgtuWeekLabel(m.week)} неделя · превью</h2><ul>`;
+    rows.slice(0,12).forEach(r=>{
+      h+=`<li class="card"><div class="top"><span class="pairno">${r.pair||'—'}</span><span class="fio"><b>${esc(DOW[r.dow]||'')}</b><small>${esc(r.time||'')}${r.subjectId?` · ${esc(subjName(r.subjectId))}`:''}${r.teacherId?` · ${esc(initials(teachName(r.teacherId)))}`:''}${r.room?' · '+esc(r.room):''}</small></span></div></li>`;
+    });
+    if(rows.length>12) h+=`<div class="empty">…и ещё ${rows.length-12}</div>`;
+    h+=`</ul>`;
+  }
+  h+=`<div class="row"><button class="btn ghost wide" data-act="openbgtu">Открыть официальный сайт БГТУ</button></div>`;
+  return h;
+}
+
+function importBGTU(){ toast('Теперь расписание загружается автоматически — нажми «Обновить расписание».'); syncBGTU(); }
+
 function viewDir(){
   const isT = ctx.dir==='teachers';
   const items = isT ? S.teachers : S.subjects;
@@ -1056,11 +1238,12 @@ document.addEventListener('click', e=>{
       const id=btn.dataset.id; S.lessons=S.lessons.filter(l=>l.id!==id); delete S.att[id]; save(); } break;
     case 'fromtpl': {
       const d=dowOf(curDate);
-      const rows=S.tpl.filter(t=>t.dow===d);
+      const selectedWeek = S.schedule?.week || 'odd';
+      const rows=S.tpl.filter(t=>t.dow===d && (!t.week || t.week===selectedWeek));
       if(!rows.length) return toast('В шаблоне нет пар на '+DOW[d]);
       let k=0;
       rows.forEach(t=>{ if(S.lessons.some(l=>l.date===curDate && l.pair===t.pair)) return;
-        S.lessons.push({id:uid('l'),date:curDate,pair:t.pair,subjectId:t.subjectId,kind:t.kind,room:t.room,teacherId:''}); k++; });
+        S.lessons.push({id:uid('l'),date:curDate,pair:t.pair,subjectId:t.subjectId,kind:t.kind,room:t.room,teacherId:t.teacherId||'',week:t.week||selectedWeek,time:t.time||'',source:t.source==='bgtu'?'bgtu':'manual'}); k++; });
       save(); toast(k?`Добавлено пар: ${k}`:'Уже всё стоит'); break; }
     case 'daysum': {
       const ls=lessonsOn(curDate);
@@ -1121,6 +1304,11 @@ document.addEventListener('click', e=>{
         bad.length?`Под угрозой: ${bad.length}`:'Все в порядке'); return; }
 
     case 'goimport': view='import'; ctx={imode:'people',raw:'',rows:null}; break;
+    case 'gobgtu': view='bgtu'; break;
+    case 'setweek': { if(S.schedule) S.schedule.week=btn.dataset.v; save(); ensureBGTULessonsForDate(curDate); break; }
+    case 'syncbgtu': syncBGTU(); return;
+    case 'openbgtu': window.open('https://www.tu-bryansk.ru/education/schedule/','_blank','noopener'); return;
+    case 'importbgtu': importBGTU(); return;
     case 'godir': view='dir'; ctx.dir=btn.dataset.v; break;
     case 'gotpl': view='tpl'; break;
     case 'adddir': {
@@ -1281,7 +1469,7 @@ document.addEventListener('focusout', ()=>setTimeout(measure,120));
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
       if(had && !reloading){ reloading = true; location.reload(); }
     });
-    navigator.serviceWorker.register('./sw.js').then(r=>r.update()).catch(()=>{});
+    navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
   }
 })();
 </script>

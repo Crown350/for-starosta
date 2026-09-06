@@ -1,53 +1,37 @@
-const CACHE = 'starosta-v8';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
+const CACHE = 'starosta-v10';
+const SHELL = ['./', './index.html', './sw.js'];
 
-async function cacheShell() {
-  const cache = await caches.open(CACHE);
-  await Promise.allSettled(SHELL.map(async url => {
-    try {
-      const res = await fetch(url, { cache: 'no-cache' });
-      if (res.ok) await cache.put(url, res.clone());
-    } catch (_) {}
-  }));
-}
-
-self.addEventListener('install', e => {
-  e.waitUntil(cacheShell().then(() => self.skipWaiting()));
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(SHELL))
+      .then(() => self.skipWaiting())
+  );
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', e => {
-  const req = e.request;
+self.addEventListener('fetch', event => {
+  const req = event.request;
   if (req.method !== 'GET') return;
 
-  if (new URL(req.url).origin === location.origin) {
-    e.respondWith(
-      caches.match(req).then(hit => hit || fetch(req).then(res => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-        }
-        return res;
-      }).catch(() => caches.match('./index.html')))
-    );
-    return;
-  }
+  const url = new URL(req.url);
+  // Расписание всегда должно запрашиваться свежим. Не кэшируем API-ответы.
+  if (url.origin === location.origin && url.pathname.startsWith('/api/')) return;
 
-  if (/jsdelivr\.net|tessdata/.test(req.url)) {
-    e.respondWith(
-      caches.match(req).then(hit => hit || fetch(req).then(res => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-        }
-        return res;
-      }))
+  if (url.origin === location.origin) {
+    event.respondWith(
+      caches.match(req).then(hit => hit || fetch(req).then(response => {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(req, copy)).catch(() => {});
+        return response;
+      }).catch(() => caches.match('./index.html')))
     );
   }
 });
