@@ -32,7 +32,10 @@
   --safe-t:env(safe-area-inset-top,0px);
   --safe-l:env(safe-area-inset-left,0px);
   --safe-r:env(safe-area-inset-right,0px);
-  --navh:64px;
+  --navh:66px;      /* пересчитывается из реальной высоты панели */
+  --navgap:0px;     /* зазор от низа экрана до панели */
+  --vh:100dvh;      /* видимая высота, меняется при клавиатуре */
+  --kb:0px;         /* высота клавиатуры */
 }
 @media (prefers-color-scheme:dark){
   :root{
@@ -63,7 +66,8 @@ body{
   min-height:100vh;
   min-height:100dvh;
   overscroll-behavior-y:none;
-  padding-bottom:calc(var(--navh) + var(--safe-b) + 26px);
+  overflow-x:hidden;
+  padding-bottom:0;
 }
 
 /* ==================== ФОН, КОТОРЫЙ ПРЕЛОМЛЯЕТСЯ ==================== */
@@ -100,8 +104,9 @@ body{
   max-width:720px;margin:0 auto;
   padding:calc(10px + var(--safe-t)) calc(14px + var(--safe-r)) 14px calc(14px + var(--safe-l));
   display:flex;flex-direction:column;
-  min-height:calc(100vh - var(--navh) - 26px);
-  min-height:calc(100dvh - var(--navh) - var(--safe-b) - 26px);
+  min-height:100vh;
+  min-height:var(--vh);
+  padding-bottom:calc(var(--navh) + var(--navgap) + 26px);
 }
 .wrap>ul{flex:1 0 auto;display:flex;flex-direction:column}
 .wrap>ul>.empty{margin:auto 0}
@@ -257,6 +262,7 @@ nav{
   position:fixed;z-index:30;
   left:calc(12px + var(--safe-l));right:calc(12px + var(--safe-r));
   bottom:calc(10px + var(--safe-b));
+  transition:transform .28s cubic-bezier(.32,.72,0,1);
   display:flex;border-radius:26px;padding:5px;
   background:var(--glass);
   -webkit-backdrop-filter:blur(26px) saturate(190%);
@@ -264,7 +270,7 @@ nav{
   border:.5px solid var(--stroke);
   box-shadow:var(--shadow),inset 0 1px 0 var(--glass-hi);
   max-width:696px;margin:0 auto;
-  transform:translateZ(0);isolation:isolate;contain:paint;
+  transform:translateZ(0);isolation:isolate;
 }
 nav button{
   background:none;border:none;flex:1;padding:7px 2px 8px;cursor:pointer;border-radius:21px;
@@ -293,6 +299,11 @@ header>*,nav>*,.card>*,li.card>*{position:relative;z-index:1}
       rgba(255,255,255,0) 60%,rgba(255,255,255,.05) 100%);
   }
 }
+
+/* Клавиатура открыта — панель уезжает, чтобы не лезть в поле ввода */
+html.kb-open nav{transform:translateY(calc(100% + var(--safe-b) + 24px));pointer-events:none}
+html.kb-open .wrap{padding-bottom:26px}
+html.kb-open .toast{bottom:calc(var(--kb) + 22px)}
 
 /* ==================== ПРОЧЕЕ ==================== */
 .toast{
@@ -374,7 +385,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 
 <script>
 /* ============================ ХРАНИЛИЩЕ ============================ */
-const APP_V = 6;
+const APP_V = 7;
 const KEY = 'starosta-o26-ist-sii-b';
 const store = {
   async get(k){
@@ -1212,11 +1223,50 @@ function restore(){
   inp.click();
 }
 
+/* ============================ ЗАМЕРЫ УСТРОЙСТВА ============================ */
+/* Ничего не хардкодим: высоту панели, зазор до низа экрана и высоту клавиатуры
+   спрашиваем у самого телефона и складываем в CSS-переменные. */
+const root = document.documentElement;
+let _mz;
+function measure(){
+  const nav = $('nav');
+  if(!nav) return;
+  const r = nav.getBoundingClientRect();
+  const vv = window.visualViewport;
+  const vh = vv ? vv.height : window.innerHeight;
+
+  // высота панели — как она реально отрисовалась на этом экране
+  root.style.setProperty('--navh', Math.round(r.height) + 'px');
+  // зазор от низа экрана до панели (включая домашнюю полоску)
+  root.style.setProperty('--navgap', Math.max(0, Math.round(window.innerHeight - r.bottom)) + 'px');
+  // видимая высота: при открытой клавиатуре она меньше экрана
+  root.style.setProperty('--vh', Math.round(vh) + 'px');
+
+  const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+  root.style.setProperty('--kb', kb + 'px');
+  root.classList.toggle('kb-open', kb > 90);
+}
+function measureSoon(){ clearTimeout(_mz); _mz = setTimeout(measure, 60); }
+
+if(window.ResizeObserver) new ResizeObserver(measureSoon).observe(document.body);
+if(window.visualViewport){
+  visualViewport.addEventListener('resize', measure);
+  visualViewport.addEventListener('scroll', measure);
+}
+window.addEventListener('orientationchange', ()=>setTimeout(measure,220));
+window.addEventListener('resize', measureSoon);
+window.addEventListener('pageshow', measureSoon);
+document.addEventListener('focusin', measureSoon);
+document.addEventListener('focusout', ()=>setTimeout(measure,120));
+
 /* ============================ СТАРТ ============================ */
 (async function(){
   const raw = await store.get(KEY);
   if(raw){ try{ S = Object.assign(fresh(), JSON.parse(raw)); }catch(e){} }
   render();
+  measure();
+  if(window.ResizeObserver) new ResizeObserver(measureSoon).observe($('nav'));
+  setTimeout(measure, 300);
   if('serviceWorker' in navigator && location.protocol==='https:'){
     const had = !!navigator.serviceWorker.controller;
     let reloading = false;
