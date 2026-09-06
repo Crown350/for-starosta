@@ -55,6 +55,8 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{-webkit-appearance:none;appearance:none}
+button{touch-action:manipulation}
 html{-webkit-text-size-adjust:100%}
 html,body{margin:0;padding:0;min-height:100%}
 html{background:#e9eef4}
@@ -132,8 +134,10 @@ header{
 .back{background:none;border:none;color:var(--accent);font-size:14px;padding:0;cursor:pointer;font-weight:500}
 
 /* ==================== ПОЛЯ И КНОПКИ ==================== */
-.row{display:flex;gap:8px;align-items:center;margin-top:9px}
-.row.wrap-it{flex-wrap:wrap}
+.row{display:flex;gap:8px;align-items:center;margin-top:9px;min-width:0}
+.row > *{min-width:0}
+.row > .btn{flex:1 1 0}
+.row.wrap-it{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 select,input,textarea,button{font:inherit;color:inherit}
 select,input[type=text],input[type=date],input[type=number],input[type=tel],textarea{
   background:var(--glass-lo);
@@ -168,6 +172,8 @@ textarea{min-height:140px;resize:vertical;line-height:1.45}
 }
 .btn.wide{width:100%}
 .btn.danger{background:var(--bad-soft);color:var(--bad);border:.5px solid var(--bad);box-shadow:none}
+.btn{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:center}
+.iconbtn{overflow:hidden}
 .iconbtn:active,.btn:active,.mark:active,.lesson:active{transform:scale(.965);opacity:.85}
 
 /* ==================== КАРТОЧКИ ==================== */
@@ -192,7 +198,7 @@ li.yes{background:linear-gradient(90deg,var(--ok-soft),transparent 46%),var(--gl
 li.no{background:linear-gradient(90deg,var(--bad-soft),transparent 46%),var(--glass)}
 li.exc{background:linear-gradient(90deg,var(--warn-soft),transparent 46%),var(--glass)}
 
-.top{display:flex;align-items:center;gap:11px}
+.top{display:flex;align-items:center;gap:11px;min-width:0}
 .num{font-size:12px;color:var(--ink-dim);width:20px;flex:none;
   font-variant-numeric:tabular-nums;text-align:right}
 .fio{flex:1;min-width:0;font-size:15.5px;letter-spacing:-.012em}
@@ -285,7 +291,7 @@ nav button.on{color:var(--accent);background:var(--accent-soft);
 nav button:active{transform:scale(.94)}
 
 /* Зеркальный блик по кромке: имитация specular highlight */
-header,nav,.card,li.card,.toast{position:relative}
+.card,li.card{position:relative}
 header::after,nav::after,.card::after,li.card::after{
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
   background:linear-gradient(178deg,rgba(255,255,255,.5) 0%,rgba(255,255,255,.07) 26%,
@@ -331,7 +337,9 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 @media (max-width:379px){
   :root{--r:18px;--r-sm:12px}
   .htitle{font-size:19px}
+  header{padding:12px}
   .fio{font-size:14.5px}
+  .row{gap:6px}
   .mark{width:42px;height:42px}
   nav button{font-size:9.5px}
   nav button i{font-size:18px}
@@ -1273,7 +1281,7 @@ document.addEventListener('focusout', ()=>setTimeout(measure,120));
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
       if(had && !reloading){ reloading = true; location.reload(); }
     });
-    navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
+    navigator.serviceWorker.register('./sw.js').then(r=>r.update()).catch(()=>{});
   }
 })();
 </script>
