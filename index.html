@@ -966,9 +966,15 @@ function restore(){
 (async function(){
   const raw = await store.get(KEY);
   if(raw){ try{ S = Object.assign(fresh(), JSON.parse(raw)); }catch(e){} }
-  render();
-  if('serviceWorker' in navigator && location.protocol==='https:')
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    render();
+  if('serviceWorker' in navigator && location.protocol==='https:'){
+    const had = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(had && !reloading){ reloading = true; location.reload(); }
+    });
+    navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
+  }
 })();
 </script>
 </body>
