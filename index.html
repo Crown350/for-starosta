@@ -54,23 +54,44 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 html,body{margin:0;padding:0;min-height:100%}
+html{
+  background:#e6ecf3;
+  background:
+    radial-gradient(130% 70% at 50% 108%, #b4d2ea 0%, rgba(180,210,234,0) 62%),
+    linear-gradient(180deg,#eaeff5 0%,#dfe8f1 55%,#d6e2ee 100%);
+  background-attachment:fixed;
+}
+@media (prefers-color-scheme:dark){
+  html{
+    background:#070c12;
+    background:
+      radial-gradient(130% 70% at 50% 108%, #16283a 0%, rgba(22,40,58,0) 62%),
+      linear-gradient(180deg,#0a1119 0%,#070c12 55%,#050a10 100%);
+  }
+}
 body{
   color:var(--ink);
   font:16px/1.45 -apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,sans-serif;
-  background:#eaeef3;
+  background:transparent;
+  min-height:100vh;
+  min-height:100dvh;
   overscroll-behavior-y:none;
   padding-bottom:calc(var(--navh) + var(--safe-b) + 26px);
 }
-@media (prefers-color-scheme:dark){ body{background:#080d13} }
 
 /* ==================== ФОН, КОТОРЫЙ ПРЕЛОМЛЯЕТСЯ ==================== */
-.bgfx{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
-.bgfx span{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55}
-.bgfx span:nth-child(1){width:70vw;height:70vw;top:-18vw;left:-16vw;background:#7fb4e0}
-.bgfx span:nth-child(2){width:60vw;height:60vw;top:28vh;right:-22vw;background:#c9b8e8}
-.bgfx span:nth-child(3){width:66vw;height:66vw;bottom:-18vh;left:-10vw;background:#8fd8c8}
-.bgfx span:nth-child(4){width:44vw;height:44vw;top:56vh;left:24vw;background:#f0c9a8;opacity:.4}
-@media (prefers-color-scheme:dark){ .bgfx span{opacity:.3;filter:blur(72px)} }
+.bgfx{
+  position:fixed;left:0;right:0;top:0;bottom:0;
+  height:100vh;height:100dvh;
+  z-index:-1;overflow:hidden;pointer-events:none;
+}
+.bgfx span{position:absolute;border-radius:50%;filter:blur(64px);opacity:.5}
+.bgfx span:nth-child(1){width:78vw;height:78vw;top:-22vw;left:-18vw;background:#7fb4e0}
+.bgfx span:nth-child(2){width:64vw;height:64vw;top:24vh;right:-24vw;background:#c9b8e8}
+.bgfx span:nth-child(3){width:74vw;height:74vw;bottom:-16vh;left:-16vw;background:#8fd8c8}
+.bgfx span:nth-child(4){width:48vw;height:48vw;top:50vh;left:22vw;background:#f0c9a8;opacity:.38}
+.bgfx span:nth-child(5){width:96vw;height:52vh;bottom:-24vh;left:2vw;background:#9cc4e6;opacity:.42}
+@media (prefers-color-scheme:dark){ .bgfx span{opacity:.26;filter:blur(76px)} }
 
 /* ==================== СТЕКЛО ==================== */
 .glass{
@@ -156,7 +177,7 @@ li.card,.card{
   position:relative;overflow:hidden;
 }
 li.yes::before,li.no::before,li.exc::before{
-  content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px;
+  content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px;z-index:2;
 }
 li.yes::before{background:var(--ok)}
 li.no::before{background:var(--bad)}
@@ -254,6 +275,22 @@ nav button.on{color:var(--accent);background:var(--accent-soft);
   box-shadow:inset 0 1px 0 var(--glass-hi)}
 nav button:active{transform:scale(.94)}
 
+/* Зеркальный блик по кромке: имитация specular highlight */
+header,nav,.card,li.card,.toast{position:relative}
+header::after,nav::after,.card::after,li.card::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
+  background:linear-gradient(178deg,rgba(255,255,255,.5) 0%,rgba(255,255,255,.07) 26%,
+    rgba(255,255,255,0) 52%,rgba(255,255,255,.09) 100%);
+  mix-blend-mode:overlay;
+}
+header>*,nav>*,.card>*,li.card>*{position:relative;z-index:1}
+@media (prefers-color-scheme:dark){
+  header::after,nav::after,.card::after,li.card::after{
+    background:linear-gradient(178deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.03) 30%,
+      rgba(255,255,255,0) 60%,rgba(255,255,255,.05) 100%);
+  }
+}
+
 /* ==================== ПРОЧЕЕ ==================== */
 .toast{
   position:fixed;bottom:calc(var(--navh) + var(--safe-b) + 22px);left:50%;
@@ -307,6 +344,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 @media (prefers-reduced-transparency:reduce){
   :root{--glass:rgba(246,249,251,.97);--glass-hi:rgba(255,255,255,.99);--glass-lo:rgba(240,244,247,.97)}
   .bgfx{display:none}
+  header::after,nav::after,.card::after,li.card::after{display:none}
   header,nav,.card,li.card,.toast{-webkit-backdrop-filter:none;backdrop-filter:none}
 }
 @media (prefers-color-scheme:dark) and (prefers-reduced-transparency:reduce){
@@ -320,7 +358,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 </style>
 </head>
 <body>
-<div class="bgfx"><span></span><span></span><span></span><span></span></div>
+<div class="bgfx"><span></span><span></span><span></span><span></span><span></span></div>
 <div class="wrap" id="app"></div>
 <nav id="nav">
   <button data-tab="pairs"><i>📋</i>Пары</button>
@@ -333,7 +371,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 
 <script>
 /* ============================ ХРАНИЛИЩЕ ============================ */
-const APP_V = 4;
+const APP_V = 5;
 const KEY = 'starosta-o26-ist-sii-b';
 const store = {
   async get(k){
