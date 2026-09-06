@@ -152,6 +152,7 @@
 
 <script>
 /* ============================ ХРАНИЛИЩЕ ============================ */
+const APP_V = 2;
 const KEY = 'starosta-o26-ist-sii-b';
 const store = {
   async get(k){
@@ -312,6 +313,7 @@ function viewPairs(){
       </div>
       <div class="row">
         <button class="btn ghost" data-act="openatt" data-id="${l.id}" style="flex:1">Отметить (был${was===S.students.length?'и все':'о '+was})</button>
+        <button class="iconbtn" data-act="editlesson" data-id="${l.id}">✎</button>
         <button class="iconbtn" data-act="dellesson" data-id="${l.id}">🗑</button>
       </div>
     </li>`;
@@ -330,7 +332,7 @@ function viewAtt(){
   const a = attOf(l.id);
   let n=0,u=0; Object.values(a).forEach(v=>{ if(v==='n')n++; else if(v==='u')u++; });
   const tot=S.students.length||1, was=S.students.length-n-u;
-  let h = head(subjName(l.subjectId), `${fmtDate(l.date)} · ${l.pair} пара · ${esc(l.kind||'')}`, 1) + `
+  let h = head(subjName(l.subjectId), `${fmtDate(l.date)} · ${l.pair} пара · ${esc(l.kind||'')}${l.room?' · ауд. '+esc(l.room):''} <button class="back" data-act="editlesson" data-id="${l.id}">изменить</button>`, 1) + `
     <div class="bar">
       <div class="bartrack">
         <div class="barfill" style="width:${was/tot*100}%"></div>
@@ -580,6 +582,7 @@ function viewMore(){
       <p class="hint">Сколько прогулов по предмету, чтобы подсветить человека красным.</p>
     </div>
     <p class="hint">Данные лежат только на этом телефоне. Делай резервную копию раз в неделю.</p>
+    <p class="hint">Версия ${APP_V}</p>
     <div style="height:20px"></div>`;
 }
 function viewDir(){
@@ -783,6 +786,29 @@ document.addEventListener('click', e=>{
       const room = prompt('Аудитория (можно пусто)','')||'';
       S.lessons.push({id:uid('l'),date:curDate,pair:+pair,subjectId:p.id,kind,room,teacherId:p.teacherId||''});
       save(); break; }
+    case 'editlesson': {
+      const l = S.lessons.find(x=>x.id===btn.dataset.id);
+      if(!l) return;
+      if(!S.subjects.length) return toast('Сначала добавь предметы');
+      const list = S.subjects.map((p,i)=>`${i+1}. ${p.name}`).join('\n');
+      const cur = S.subjects.findIndex(p=>p.id===l.subjectId) + 1;
+      const pick = prompt('Предмет — номер из списка:\n'+list, String(cur||1));
+      if(pick===null) return;
+      const p = S.subjects[+pick-1];
+      if(!p) return toast('Нет такого номера');
+      const pair = prompt('Номер пары', String(l.pair)); if(pair===null) return;
+      const kind = prompt('Тип: '+KINDS.join(' / '), l.kind||''); if(kind===null) return;
+      const room = prompt('Аудитория (можно пусто)', l.room||''); if(room===null) return;
+      const date = prompt('Дата в формате ГГГГ-ММ-ДД', l.date); if(date===null) return;
+      l.subjectId = p.id;
+      l.pair = +pair || l.pair;
+      l.kind = kind.trim();
+      l.room = room.trim();
+      if(/^\d{4}-\d{2}-\d{2}$/.test(date.trim())){
+        l.date = date.trim();
+        if(l.date !== curDate){ curDate = l.date; view = null; }
+      } else if(date.trim() !== l.date){ toast('Дату не понял — оставил прежнюю'); }
+      save(); break; }
     case 'dellesson': if(confirm('Удалить пару вместе с отметками?')){
       const id=btn.dataset.id; S.lessons=S.lessons.filter(l=>l.id!==id); delete S.att[id]; save(); } break;
     case 'fromtpl': {
@@ -966,7 +992,7 @@ function restore(){
 (async function(){
   const raw = await store.get(KEY);
   if(raw){ try{ S = Object.assign(fresh(), JSON.parse(raw)); }catch(e){} }
-    render();
+  render();
   if('serviceWorker' in navigator && location.protocol==='https:'){
     const had = !!navigator.serviceWorker.controller;
     let reloading = false;
