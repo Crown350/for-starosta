@@ -54,21 +54,8 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 html,body{margin:0;padding:0;min-height:100%}
-html{
-  background:#e6ecf3;
-  background:
-    radial-gradient(130% 70% at 50% 108%, #b4d2ea 0%, rgba(180,210,234,0) 62%),
-    linear-gradient(180deg,#eaeff5 0%,#dfe8f1 55%,#d6e2ee 100%);
-  background-attachment:fixed;
-}
-@media (prefers-color-scheme:dark){
-  html{
-    background:#070c12;
-    background:
-      radial-gradient(130% 70% at 50% 108%, #16283a 0%, rgba(22,40,58,0) 62%),
-      linear-gradient(180deg,#0a1119 0%,#070c12 55%,#050a10 100%);
-  }
-}
+html{background:#e9eef4}
+@media (prefers-color-scheme:dark){ html{background:#080e15} }
 body{
   color:var(--ink);
   font:16px/1.45 -apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,sans-serif;
@@ -81,17 +68,24 @@ body{
 
 /* ==================== ФОН, КОТОРЫЙ ПРЕЛОМЛЯЕТСЯ ==================== */
 .bgfx{
-  position:fixed;left:0;right:0;top:0;bottom:0;
-  height:100vh;height:100dvh;
-  z-index:-1;overflow:hidden;pointer-events:none;
+  position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;
+  background:linear-gradient(175deg,#eef2f7 0%,#dfe8f2 46%,#cddcec 100%);
+  transform:translateZ(0);
 }
-.bgfx span{position:absolute;border-radius:50%;filter:blur(64px);opacity:.5}
-.bgfx span:nth-child(1){width:78vw;height:78vw;top:-22vw;left:-18vw;background:#7fb4e0}
-.bgfx span:nth-child(2){width:64vw;height:64vw;top:24vh;right:-24vw;background:#c9b8e8}
-.bgfx span:nth-child(3){width:74vw;height:74vw;bottom:-16vh;left:-16vw;background:#8fd8c8}
-.bgfx span:nth-child(4){width:48vw;height:48vw;top:50vh;left:22vw;background:#f0c9a8;opacity:.38}
-.bgfx span:nth-child(5){width:96vw;height:52vh;bottom:-24vh;left:2vw;background:#9cc4e6;opacity:.42}
-@media (prefers-color-scheme:dark){ .bgfx span{opacity:.26;filter:blur(76px)} }
+@media (prefers-color-scheme:dark){
+  .bgfx{background:linear-gradient(175deg,#0e1721 0%,#0a121b 46%,#0b1420 100%)}
+}
+.bgfx span{position:absolute;border-radius:50%;filter:blur(66px);opacity:.5}
+.bgfx span:nth-child(1){width:82vw;height:82vw;top:-24vw;left:-20vw;background:#7fb4e0}
+.bgfx span:nth-child(2){width:64vw;height:64vw;top:22vh;right:-26vw;background:#c3b4e6}
+.bgfx span:nth-child(3){width:78vw;height:78vw;bottom:-12vh;left:-22vw;background:#86d4c6}
+.bgfx span:nth-child(4){width:52vw;height:52vw;top:46vh;left:20vw;background:#f0c9a8;opacity:.36}
+.bgfx span:nth-child(5){width:88vw;height:44vh;bottom:-14vh;right:-14vw;background:#8ab8e2;opacity:.46}
+@media (prefers-color-scheme:dark){
+  .bgfx span{opacity:.3;filter:blur(78px)}
+  .bgfx span:nth-child(4){opacity:.2}
+  .bgfx span:nth-child(5){opacity:.28}
+}
 
 /* ==================== СТЕКЛО ==================== */
 .glass{
@@ -105,7 +99,13 @@ body{
 .wrap{
   max-width:720px;margin:0 auto;
   padding:calc(10px + var(--safe-t)) calc(14px + var(--safe-r)) 14px calc(14px + var(--safe-l));
+  display:flex;flex-direction:column;
+  min-height:calc(100vh - var(--navh) - 26px);
+  min-height:calc(100dvh - var(--navh) - var(--safe-b) - 26px);
 }
+.wrap>ul{flex:1 0 auto;display:flex;flex-direction:column}
+.wrap>ul>.empty{margin:auto 0}
+.wrap>.empty{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}
 h2{font-size:15px;margin:22px 4px 9px;font-weight:600;letter-spacing:-.01em;color:var(--ink-soft)}
 h2:first-child{margin-top:6px}
 small{color:var(--ink-soft)}
@@ -120,6 +120,7 @@ header{
   border-radius:var(--r);
   padding:13px 15px;
   position:sticky;top:calc(8px + var(--safe-t));z-index:20;
+  transform:translateZ(0);isolation:isolate;
 }
 .grp{font-size:12.5px;color:var(--ink-soft);letter-spacing:.01em}
 .htitle{font-size:21px;font-weight:640;letter-spacing:-.022em;margin-top:1px;line-height:1.2}
@@ -152,7 +153,7 @@ textarea{min-height:140px;resize:vertical;line-height:1.45}
 .btn{
   background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);
   min-height:46px;padding:12px 16px;cursor:pointer;font-size:15px;font-weight:560;
-  letter-spacing:-.01em;box-shadow:0 6px 18px -6px var(--accent),inset 0 1px 0 rgba(255,255,255,.28);
+  letter-spacing:-.01em;box-shadow:0 4px 14px -8px var(--accent),inset 0 1px 0 rgba(255,255,255,.22);
   transition:transform .12s ease,opacity .12s ease;
 }
 .btn.ghost{
@@ -228,13 +229,13 @@ li.exc{background:linear-gradient(90deg,var(--warn-soft),transparent 46%),var(--
   font-variant-numeric:tabular-nums;flex-wrap:wrap}
 .stats b{color:var(--ink);font-weight:640}
 
-.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:520;
-  background:var(--glass-lo);border:.5px solid var(--stroke);border-radius:99px;padding:4px 10px;
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:520;
+  background:var(--glass-lo);border:.5px solid var(--stroke);border-radius:99px;padding:3px 9px;
   color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap}
 .chip.bad{background:var(--bad-soft);border-color:transparent;color:var(--bad)}
 .chip.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
 .chip.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px;padding-left:31px}
 
 /* ==================== ПАРА ==================== */
 .lesson{display:flex;align-items:center;gap:11px;cursor:pointer;
@@ -263,6 +264,7 @@ nav{
   border:.5px solid var(--stroke);
   box-shadow:var(--shadow),inset 0 1px 0 var(--glass-hi);
   max-width:696px;margin:0 auto;
+  transform:translateZ(0);isolation:isolate;contain:paint;
 }
 nav button{
   background:none;border:none;flex:1;padding:7px 2px 8px;cursor:pointer;border-radius:21px;
@@ -270,7 +272,8 @@ nav button{
   display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;
   transition:background .18s ease,color .18s ease;
 }
-nav button i{font-style:normal;font-size:19px;line-height:1}
+nav button i{display:grid;place-items:center;width:24px;height:24px}
+nav button svg{width:23px;height:23px;display:block}
 nav button.on{color:var(--accent);background:var(--accent-soft);
   box-shadow:inset 0 1px 0 var(--glass-hi)}
 nav button:active{transform:scale(.94)}
@@ -361,17 +364,17 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 <div class="bgfx"><span></span><span></span><span></span><span></span><span></span></div>
 <div class="wrap" id="app"></div>
 <nav id="nav">
-  <button data-tab="pairs"><i>📋</i>Пары</button>
-  <button data-tab="works"><i>✓</i>Сдачи</button>
-  <button data-tab="money"><i>₽</i>Деньги</button>
-  <button data-tab="group"><i>👥</i>Группа</button>
-  <button data-tab="more"><i>⚙︎</i>Ещё</button>
+  <button data-tab="pairs"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9.5 4h5v2.6h-5z"/><path d="M9 12.5h6M9 16.5h3.5"/></svg></i>Пары</button>
+  <button data-tab="works"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M8.4 12.3l2.5 2.5 4.7-5.2"/></svg></i>Сдачи</button>
+  <button data-tab="money"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6.4" width="18" height="11.2" rx="3"/><circle cx="12" cy="12" r="2.5"/><path d="M6.4 12h.01M17.6 12h.01"/></svg></i>Деньги</button>
+  <button data-tab="group"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.2" cy="9" r="3.2"/><path d="M3.6 19.2c.6-3.3 2.9-5 5.6-5s5 1.7 5.6 5"/><path d="M15.8 6.8a3.2 3.2 0 010 5.4M17.4 14.6c1.9.7 3 2.3 3.4 4.4"/></svg></i>Группа</button>
+  <button data-tab="more"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h8M4 15.5h3.5"/><path d="M16.5 8.5H20M11.5 15.5H20"/><circle cx="14.2" cy="8.5" r="2.2"/><circle cx="9.2" cy="15.5" r="2.2"/></svg></i>Ещё</button>
 </nav>
 <div class="toast" id="toast"></div>
 
 <script>
 /* ============================ ХРАНИЛИЩЕ ============================ */
-const APP_V = 5;
+const APP_V = 6;
 const KEY = 'starosta-o26-ist-sii-b';
 const store = {
   async get(k){
@@ -423,6 +426,8 @@ function dowOf(iso){ return new Date(iso+'T12:00:00').getDay(); }
 function subjName(id){ const s=S.subjects.find(x=>x.id===id); return s?s.name:'без предмета'; }
 function teachName(id){ const t=S.teachers.find(x=>x.id===id); return t?t.fio:''; }
 function stud(id){ return S.students.find(x=>x.id===id); }
+function plural(n,a,b,c){const m=Math.abs(n)%100,k=m%10;
+  return n+' '+(m>10&&m<20?c:k>1&&k<5?b:k===1?a:c);}
 function surname(fio){ return String(fio).trim().split(/\s+/)[0]||''; }
 function initials(fio){ const p=String(fio).trim().split(/\s+/); return p[0]+(p[1]?' '+p[1][0]+'.':'')+(p[2]?p[2][0]+'.':''); }
 function norm(s){ return String(s).toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я]/g,''); }
@@ -701,7 +706,7 @@ function viewFund(){
 function viewGroup(){
   const order = S.students;
   const dutyNow = order.length ? order[S.duty.idx % order.length] : null;
-  let h = head('Группа', `${S.students.length} человек`) + `
+  let h = head('Группа', plural(S.students.length,'человек','человека','человек')) + `
     <div class="row"><input type="text" id="gq" placeholder="Поиск по фамилии" value="${esc(ctx.gq||'')}"></div>
     </header>
     ${!S.students.length?`<div class="empty">Группы пока нет.<br>Отсканируй список в разделе «Ещё» или добавь людей вручную.</div>`:''}
@@ -724,7 +729,7 @@ function viewGroup(){
       <div class="chips">
         <span class="chip ${n>=S.limit?'bad':''}">${n} Н</span>
         <span class="chip ${u?'warn':''}">${u} У</span>
-        <span class="chip ${dw?'bad':'ok'}">${dw} долг${dw===1?'':'ов'} по работам</span>
+        <span class="chip ${dw?'bad':'ok'}">${dw?plural(dw,'долг','долга','долгов'):'всё сдано'}</span>
         ${fd?`<span class="chip bad">${fd} ₽</span>`:''}
       </div>
     </li>`;
