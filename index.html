@@ -561,6 +561,7 @@ function viewPairs(){
       <button class="iconbtn" data-act="today">сегодня</button>
     </div></header>`;
 
+  if(S.schedule?.lastError)h+=`<p class="card" role="alert">${esc(S.schedule.lastError)}</p>`;
   h += `<ul>`;
   if(!ls.length){
     h += `<div class="empty">На этот день пар нет.<br>Выбери другую дату или проверь расписание в разделе «Ещё».</div>`;
@@ -981,10 +982,12 @@ async function syncBGTU(){
   if(window.cloudScheduleBlocked?.())return toast('Сначала сохрани черновик и разреши конфликт с облаком');
   if(ctx.bgtuBusy) return;
   const targetState=S;
+  let timer;
   ctx.bgtuBusy=true;
   ctx.bgtuError='';
   render();
   try{
+    if(location.protocol==='file:')throw new Error('Открой сайт через localhost или GitHub Pages, а не файлом.');
     const q=new URLSearchParams({
       group:S.schedule?.group||'О-26-ИСТ-СИИ-Б',
       faculty:S.schedule?.faculty||'Факультет информационных технологий',
@@ -994,22 +997,24 @@ async function syncBGTU(){
       week:'all'
     });
     const ac=new AbortController();
-    const timer=setTimeout(()=>ac.abort(),20000);
+    timer=setTimeout(()=>ac.abort(),20000);
     const endpoint=window.STAROSTA_STATIC_SCHEDULE?'./schedule.json':`${window.STAROSTA_API||''}/api/bgtu/schedule?${q.toString()}`;
     const res=await fetch(endpoint,{method:'GET',cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
     clearTimeout(timer);
+    if(res.status===404)throw new Error('Файл расписания не найден (404). Проверь, что schedule.json опубликован рядом с index.html.');
     let data=null;
     try{ data=await res.json(); }catch(e){ throw new Error(`Сервер вернул не JSON (${res.status})`); }
     if(!res.ok || !data.ok) throw new Error(data?.error||`Ошибка сервера: ${res.status}`);
     if(S!==targetState)return;
-    if(data.fetchedAt && data.fetchedAt===S.schedule?.fetchedAt)return;
+    if(data.fetchedAt && data.fetchedAt===S.schedule?.fetchedAt){if(S.schedule.lastError){S.schedule.lastError='';save();}return;}
     applyBGTUSchedule(data);
   }catch(e){
-    ctx.bgtuError=e?.name==='AbortError'?'БГТУ не ответил за 20 секунд.':(e?.message||'Не удалось обновить расписание');
+    ctx.bgtuError=e?.name==='AbortError'?'Загрузка расписания превысила 20 секунд.':e instanceof TypeError?'Не удалось подключиться к расписанию. Проверь интернет и доступность сайта.':(e?.message||'Не удалось обновить расписание');
     if(S.schedule) S.schedule.lastError=ctx.bgtuError;
     save(); render();
     toast('Не удалось обновить расписание');
   }finally{
+    clearTimeout(timer);
     ctx.bgtuBusy=false; render();
   }
 }
