@@ -28,7 +28,8 @@ jobs:
         run: node scripts/update-schedule.cjs
       - name: Build static site only
         run: |
-          mkdir -p _site
+          mkdir -p _site/data
+          if [ -f data/curriculum.json ]; then cp data/curriculum.json _site/data/; else printf 'null\n' > _site/data/curriculum.json; fi
           cp index.html dialogs.js cloud.js config.js sw.js manifest.webmanifest icon-*.png schedule.json _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

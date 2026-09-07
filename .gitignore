@@ -1,4 +1,6 @@
-data/
+data/*
+!data/curriculum.json
+!data/curriculum-review.md
 node_modules/
 _site/
 .env

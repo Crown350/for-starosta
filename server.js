@@ -309,6 +309,7 @@ function server() {
         const files = {
           '/': ['index.html','text/html; charset=utf-8'],
           '/index.html': ['index.html','text/html; charset=utf-8'],
+          '/data/curriculum.json': ['data/curriculum.json','application/json; charset=utf-8'],
           '/schedule.json': ['schedule.json','application/json; charset=utf-8'],
           '/dialogs.js': ['dialogs.js','application/javascript; charset=utf-8'],
           '/cloud.js': ['cloud.js','application/javascript; charset=utf-8'],
@@ -322,6 +323,7 @@ function server() {
         const item = files[url.pathname];
         if (item) {
           const full = path.join(__dirname, item[0]);
+          if (!fs.existsSync(full) && url.pathname==='/data/curriculum.json'){res.writeHead(204,{'Cache-Control':'no-store'});return res.end();}
           if (!fs.existsSync(full)) return json(res, 404, { ok:false, error:`Файл ${item[0]} не найден` });
           const file = fs.readFileSync(full);
           res.writeHead(200, { 'Content-Type': item[1], 'Cache-Control': url.pathname === '/sw.js' ? 'no-store' : 'no-cache' });
