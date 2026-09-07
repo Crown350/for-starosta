@@ -76,4 +76,5 @@
   window.addEventListener('beforeunload',e=>{if(dirty||writing){e.preventDefault();e.returnValue='';}});
   setInterval(async()=>{if(!ready||dirty||writing||conflict||window.modalPending||document.hidden||document.activeElement?.matches('input,textarea,select'))return;const requestedRevision=revision;try{const data=await api('/api/state');if(!ready||dirty||writing||conflict||window.modalPending||revision!==requestedRevision)return;if(data.revision!==revision){revision=data.revision;S=Object.assign(fresh(),data.data||{});render();status('Получены изменения с другого устройства');}}catch(e){status('Облако недоступно · '+e.message);}},15000);
   permissions();
+  startApp().catch(error=>status('Не удалось запустить приложение: '+error.message));
 })();

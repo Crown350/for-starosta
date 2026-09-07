@@ -1479,8 +1479,7 @@ document.addEventListener('focusin', measureSoon);
 document.addEventListener('focusout', ()=>setTimeout(measure,120));
 
 /* ============================ СТАРТ ============================ */
-(async function(){
-  await new Promise(resolve=>setTimeout(resolve,0));
+async function startApp(){
   const raw = await store.get(KEY);
   if(raw){ try{ S = Object.assign(fresh(), JSON.parse(raw)); }catch(e){} }
   await window.cloudInit();
@@ -1496,7 +1495,7 @@ document.addEventListener('focusout', ()=>setTimeout(measure,120));
     });
     navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
   }
-})();
+}
 </script>
 <script src="dialogs.js"></script>
 <script src="cloud.js"></script>
