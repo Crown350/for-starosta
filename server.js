@@ -319,6 +319,7 @@ function server() {
           '/vendor/ocr/tesseract-core-simd-lstm.wasm.js': ['vendor/ocr/tesseract-core-simd-lstm.wasm.js','application/javascript'],
           '/vendor/ocr/rus.traineddata.gz': ['vendor/ocr/rus.traineddata.gz','application/gzip'],
           '/cloud.js': ['cloud.js','application/javascript; charset=utf-8'],
+          '/local-copy.js': ['local-copy.js','application/javascript; charset=utf-8'],
           '/config.js': ['config.js','application/javascript; charset=utf-8'],
           '/icon-180.png': ['icon-180.png','image/png'],
           '/icon-192.png': ['icon-192.png','image/png'],

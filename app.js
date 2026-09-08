@@ -9,6 +9,10 @@ const store = {
   async set(k,v){
     if (window.storage) { try { await window.storage.set(k,v); return; } catch(e){} }
     try { localStorage.setItem(k,v); } catch(e){ toast('Память заполнена'); }
+  },
+  async remove(k){
+    if(window.storage && typeof window.storage.delete==='function')await window.storage.delete(k);
+    localStorage.removeItem(k);
   }
 };
 
@@ -459,7 +463,7 @@ function viewMore(){
       <div class="row"><input type="number" inputmode="numeric" data-act="limit" value="${S.limit}" placeholder="порог"></div>
       <p class="hint">Сколько прогулов по предмету, чтобы подсветить человека красным.</p>
     </div>
-    <p class="hint">Данные лежат только на этом телефоне. Делай резервную копию раз в неделю.</p>
+      <p class="hint">Журнал хранится в облаке. Копия на устройстве сохраняется только с твоего согласия и удаляется при выходе.</p>
     <p class="hint">Версия ${APP_V}</p>
     <div style="height:20px"></div>`;
 }
@@ -1118,4 +1122,3 @@ async function startApp(){
     navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
   }
 }
-

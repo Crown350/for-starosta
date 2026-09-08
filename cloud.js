@@ -2,12 +2,16 @@
 (()=>{
   let token='', revision=0, ready=false, dirty=false, writing=false, conflict=false, timer;
   let localBackup=null;
+  const localCopy=new JournalLocalCopy(store,KEY);
+  const privacyError=()=>status('Не удалось очистить копию устройства. Очисти данные сайта в браузере.');
   const safeActions=new Set(['back','dshift','today','openatt','attreport','daysum','openwork','workreport','openfund','fundreport','openstud','msgstud','risk','gobgtu','openbgtu','godir','gotpl','csvatt','csvworks','backup','syncbgtu','setweek']);
   window.cloudCanEdit=()=>ready && !!token && !conflict;
   window.cloudScheduleBlocked=()=>!!token && conflict;
   const panel=document.createElement('section');panel.id='cloud-panel';
-  panel.innerHTML='<div><b>Общий журнал</b><p id="cloud-status" role="status" aria-live="polite">Просмотр · войди по ключу для доступа к журналу</p></div><form id="cloud-login"><input id="cloud-key" type="password" autocomplete="off" placeholder="Ключ доступа" aria-label="Ключ доступа" required><button>Войти</button></form><details id="cloud-tools" hidden><summary>Управление журналом</summary><div class="cloud-buttons"><button id="cloud-pull">Загрузить из облака</button><button id="cloud-push">Повторить сохранение</button><button id="cloud-import">Перенести данные с этого устройства</button><button id="cloud-draft">Скачать несохранённое</button><button id="cloud-logout">Выйти</button></div></details>';
+  panel.innerHTML='<div><b>Общий журнал</b><p id="cloud-status" role="status" aria-live="polite">Просмотр · войди по ключу для доступа к журналу</p></div><form id="cloud-login"><input id="cloud-key" type="password" autocomplete="off" placeholder="Ключ доступа" aria-label="Ключ доступа" required><button>Войти</button></form><details id="cloud-tools" hidden><summary>Управление журналом</summary><label><input id="cloud-offline" type="checkbox"> Сохранять офлайн-копию на устройстве до выхода</label><div class="cloud-buttons"><button id="cloud-pull">Загрузить из облака</button><button id="cloud-push">Повторить сохранение</button><button id="cloud-import">Перенести данные с этого устройства</button><button id="cloud-draft">Скачать несохранённое</button><button id="cloud-logout">Выйти</button></div></details>';
   document.body.insertBefore(panel,document.getElementById('app'));
+  const offline=document.getElementById('cloud-offline');
+  offline.onchange=async()=>{try{await localCopy.setEnabled(offline.checked);if(offline.checked&&ready)await localCopy.save(JSON.stringify(S));}catch{privacyError();}};
   const recovery=document.createElement('button');recovery.textContent='Скачать черновик устройства';
   recovery.onclick=async()=>{const draft=await store.get(KEY+'-cloud-draft');if(!draft)return status('На этом устройстве черновика нет');download('starosta-device-draft.json',draft,'application/json');};
   document.querySelector('.cloud-buttons').append(recovery);
@@ -60,10 +64,10 @@
   }
   window.cloudSave=()=>{
     if(!window.cloudCanEdit())return;
-    dirty=true;store.set(KEY+'-cloud-draft',JSON.stringify(S));
+    dirty=true;localCopy.save(JSON.stringify(S)).catch(privacyError);
     clearTimeout(timer);timer=setTimeout(async()=>{if(writing){timer=setTimeout(window.cloudSave,300);return;}await push();},350);
   };
-  window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');await syncBGTU();};
+  window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));offline.checked=await localCopy.init();S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');await syncBGTU();};
   document.getElementById('cloud-login').onsubmit=async e=>{
     e.preventDefault();token=document.getElementById('cloud-key').value.trim();document.getElementById('cloud-key').value='';status('Проверяю ключ…');
     try{await api('/api/session');await pull();}catch(error){token='';ready=false;status(error.message);permissions();}
@@ -72,7 +76,7 @@
   document.getElementById('cloud-push').onclick=()=>push();
   document.getElementById('cloud-draft').onclick=()=>download('starosta-draft-'+todayISO()+'.json',JSON.stringify(S),'application/json');
   document.getElementById('cloud-import').onclick=async()=>{if(!window.cloudCanEdit())return;if(!await askConfirm('Заменить общий журнал данными, сохранёнными на этом устройстве до входа?'))return;S=JSON.parse(JSON.stringify(localBackup));save();render();};
-  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;clearTimeout(timer);S=fresh();view=null;ctx={};permissions();render();status('Выход выполнен · журнал скрыт');};
+  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;clearTimeout(timer);S=fresh();localBackup=null;view=null;ctx={};offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
   window.addEventListener('beforeunload',e=>{if(dirty||writing){e.preventDefault();e.returnValue='';}});
   setInterval(async()=>{if(!ready||dirty||writing||conflict||window.modalPending||document.hidden||document.activeElement?.matches('input,textarea,select'))return;const requestedRevision=revision;try{const data=await api('/api/state');if(!ready||dirty||writing||conflict||window.modalPending||revision!==requestedRevision)return;if(data.revision!==revision){revision=data.revision;S=Object.assign(fresh(),data.data||{});render();status('Получены изменения с другого устройства');}}catch(e){status('Облако недоступно · '+e.message);}},15000);
   permissions();

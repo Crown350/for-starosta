@@ -1,0 +1,6 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const JournalLocalCopy=require('../local-copy');
+function fixture(initial={}){const data=new Map(Object.entries(initial));return {data,copy:new JournalLocalCopy({async get(k){return data.get(k);},async set(k,v){await new Promise(r=>setTimeout(r,5));data.set(k,v);},async remove(k){data.delete(k);}},'journal')};}
+test('device copy defaults off and removes legacy journal data',async()=>{const {data,copy}=fixture({journal:'legacy','journal-cloud-draft':'private'});assert.equal(await copy.init(),false);await copy.save('private');assert.equal(data.size,0);});
+test('opt-in survives reload; opt-out removes journal, not unrelated data',async()=>{const {data,copy}=fixture({other:'keep'});await copy.setEnabled(true);await copy.save('draft');assert.equal(await copy.init(),true);assert.equal(data.get('journal-cloud-draft'),'draft');await copy.setEnabled(false);assert.deepEqual([...data],[['other','keep']]);});
+test('logout wins over a pending write and resets consent',async()=>{const {data,copy}=fixture();await copy.setEnabled(true);const writing=copy.save('private');await copy.logout();await writing;await copy.save('late');assert.equal(data.size,0);assert.equal(copy.enabled,false);});
