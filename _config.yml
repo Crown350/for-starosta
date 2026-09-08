@@ -1,0 +1,14 @@
+# Defense in depth for accidental legacy Pages builds. Production uses Actions.
+exclude:
+  - server.js
+  - cloud-server.js
+  - supabase.sql
+  - activate-keys.sql
+  - tests
+  - scripts
+  - security
+  - data/curriculum-review.md
+  - package.json
+  - package-lock.json
+  - README.md
+  - site-files.json

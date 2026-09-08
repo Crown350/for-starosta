@@ -1,0 +1,9 @@
+[
+  "index.html", "app.js", "dialogs.js", "cloud.js", "config.js", "sw.js",
+  "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png",
+  "schedule.json", "data/curriculum.json",
+  "vendor/ocr/tesseract.min.js", "vendor/ocr/worker.min.js",
+  "vendor/ocr/tesseract-core-lstm.wasm.js", "vendor/ocr/tesseract-core-simd-lstm.wasm.js",
+  "vendor/ocr/rus.traineddata.gz", "vendor/ocr/LICENSE-core.txt",
+  "vendor/ocr/LICENSE-tesseract.txt"
+]
