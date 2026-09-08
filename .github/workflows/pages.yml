@@ -26,6 +26,8 @@ jobs:
       - run: npm test
       - name: Fetch official schedule
         run: node scripts/update-schedule.cjs
+      - name: Publish schedule snapshot to Supabase
+        run: node scripts/publish-schedule.cjs
       - name: Build static site only
         run: node scripts/build-site.cjs
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
