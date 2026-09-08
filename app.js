@@ -789,12 +789,11 @@ function doImport(){
   save(); render();
 }
 async function runOCR(){
-  const inp = document.createElement('input');
+  const inp = document.getElementById('ocr-upload') || document.createElement('input');
   inp.type='file'; inp.accept='image/*';
-  inp.hidden=true; document.body.appendChild(inp);
-  inp.oncancel=()=>inp.remove();
+  inp.id='ocr-upload'; inp.hidden=true; document.body.appendChild(inp);
   inp.onchange = async () => {
-    const f = inp.files[0]; inp.remove(); if(!f) return;
+    const f = inp.files[0]; inp.value=''; if(!f) return;
     const box = $('ocrbox');
     box.innerHTML = `<div class="card"><div class="hint">Готовлю распознавание…</div><progress id="pg" value="0" max="1"></progress></div>`;
     try{
