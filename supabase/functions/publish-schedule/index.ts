@@ -8,10 +8,12 @@ Deno.serve(async(req:Request)=>{
     if(!token)throw new Error('missing token');
     const {payload}=await jwtVerify(token,jwks,{
       issuer:'https://token.actions.githubusercontent.com',audience,algorithms:['RS256'],
-      subject:'repo:Crown350/for-starosta:environment:github-pages',requiredClaims:['exp','iat','ref','workflow_ref','repository'],
+      requiredClaims:['exp','iat','ref','workflow_ref','repository_id','repository_owner_id','environment'],
     });
-    if(payload.repository!=='Crown350/for-starosta'||payload.ref!=='refs/heads/main'
-      ||payload.workflow_ref!=='Crown350/for-starosta/.github/workflows/pages.yml@refs/heads/main')throw new Error('wrong workflow');
+    // Immutable IDs also protect against repository renames and name reuse.
+    if(payload.repository_id!=='1359025312'||payload.repository_owner_id!=='107409470'
+      ||payload.ref!=='refs/heads/main'||payload.environment!=='github-pages'
+      ||String(payload.workflow_ref).toLowerCase()!=='crown350/for-starosta/.github/workflows/pages.yml@refs/heads/main')throw new Error('wrong workflow');
   }catch(e){return Response.json({ok:false,error:'Unauthorized workflow',reason:e.code||e.message,claim:e.claim||null},{status:401});}
   try{
     const body=await req.text();

@@ -17,7 +17,8 @@ Accept, Accept-Language и Referer и увеличение лимита до 25 
 Рабочая схема: Actions получает БГТУ, publish-schedule принимает снимок только
 с подписанным GitHub OIDC-токеном Pages workflow из main; fetch-schedule только
 читает БД. Без editor key разрешено чтение, запись напрямую закрыта.
-Подпись, issuer, audience, subject, repository, ref, workflow_ref и срок токена
+Подпись, issuer, audience, repository_id, repository_owner_id, environment,
+ref, workflow_ref и срок токена
 проверяются на сервере. Долгоживущие секреты в Actions не требуются.
 Справка: https://docs.github.com/en/actions/reference/security/oidc
 
