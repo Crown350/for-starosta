@@ -12,7 +12,7 @@ Deno.serve(async(req:Request)=>{
     });
     if(payload.repository!=='Crown350/for-starosta'||payload.ref!=='refs/heads/main'
       ||payload.workflow_ref!=='Crown350/for-starosta/.github/workflows/pages.yml@refs/heads/main')throw new Error('wrong workflow');
-  }catch{return Response.json({ok:false,error:'Unauthorized workflow'},{status:401});}
+  }catch(e){return Response.json({ok:false,error:'Unauthorized workflow',reason:e.code||e.message,claim:e.claim||null},{status:401});}
   try{
     const body=await req.text();
     if(body.length>200000)return Response.json({ok:false},{status:413});

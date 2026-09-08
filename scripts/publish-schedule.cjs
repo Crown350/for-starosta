@@ -11,7 +11,10 @@ const endpoint='https://piwxslgxwmdrehnomymt.supabase.co/functions/v1/publish-sc
   if(!value)throw new Error('Missing OIDC token');
   const res=await fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${value}`,'Content-Type':'application/json'},
     body:fs.readFileSync(path.join(__dirname,'../schedule.json'),'utf8'),signal:AbortSignal.timeout(30000)});
-  if(!res.ok)throw new Error(`Publish schedule: HTTP ${res.status}`);
+  if(!res.ok){
+    const error=await res.json().catch(()=>({}));
+    throw new Error(`Publish schedule: HTTP ${res.status}; ${error.error||error.message||''}; ${error.reason||''}; ${error.claim||''}`);
+  }
   const result=await res.json();
   if(!result.ok)throw new Error('Snapshot rejected');
   console.log(`Supabase: ${result.lessons||'cached'} занятий, изменилось: ${result.changed}`);
