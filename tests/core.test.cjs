@@ -18,7 +18,7 @@ test('real BGTU markup: subjects, rooms, blank odd/even slots and pair 8',()=>{
  assert.throws(()=>parseCurrentWeek('Service unavailable'));
 });
 test('calendar parity alternates across Monday, including previous weeks',()=>{
- const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const source=fs.readFileSync(path.join(__dirname,'../app.js'),'utf8');
  const fn=source.slice(source.indexOf('function bgtuCurrentWeekForDate('),source.indexOf('function ensureBGTULessonsForDate('));
  const context=vm.createContext({S:{schedule:{weekAnchor:'2026-09-07',currentWeek:'even'}},todayISO:()=> '2026-09-07'});
  vm.runInContext(fn,context);

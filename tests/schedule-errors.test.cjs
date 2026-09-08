@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const vm=require('node:vm');
-const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+const html=fs.readFileSync(path.join(__dirname,'../app.js'),'utf8');
 const fn=html.slice(html.indexOf('async function syncBGTU(){'),html.indexOf('function viewBGTU(){'));
 async function run(protocol,fetch){
  const c=vm.createContext({window:{STAROSTA_STATIC_SCHEDULE:true},location:{protocol},S:{schedule:{}},ctx:{},render(){},save(){},toast(){},URLSearchParams,AbortController,setTimeout,clearTimeout,TypeError,fetch});

@@ -1,0 +1,1 @@
+Local OCR assets: tesseract.js 5.1.1, tesseract.js-core 5.1.1, @tesseract.js-data/rus 1.0.0 (4.0.0_best_int). Downloaded from the official npm registry; package SHA-512 integrity verified. Tesseract and trained data use Apache-2.0. Only LSTM engines are shipped.
