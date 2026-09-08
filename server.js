@@ -8,7 +8,7 @@ const PORT = Number(process.env.PORT || 8787);
 const BASE = 'https://www.tu-bryansk.ru/education/schedule/';
 const AJAX = new URL('schedule.ajax.php', BASE).toString();
 const DEFAULTS = {
-  group: 'О-26-ИСТ-СИИ-Б',
+  group: 'О-26-ИСТ-сии-Б',
   faculty: 'Факультет информационных технологий',
   level: 'бакалавр',
   period: '2026-2027_1_1',
@@ -30,7 +30,7 @@ const DAY_MAP = {
 
 const TIME_TO_PAIR = new Map([
   ['08:00', 1], ['09:45', 2], ['11:30', 3], ['13:20', 4],
-  ['15:05', 5], ['16:50', 6], ['18:40', 7], ['20:10', 8]
+  ['15:05', 5], ['16:50', 6], ['18:40', 7], ['20:10', 8], ['20:25', 8]
 ]);
 
 function cleanText(input) {
@@ -95,7 +95,8 @@ function extractTables(html) {
 
 function parseCurrentWeek(pageHtml) {
   const m = String(pageHtml || '').match(/Расписание\s+занятий\s*\(([^)]*неделя)[^)]*\)/i);
-  if (!m) return 'odd';
+  if (!m) throw new Error('БГТУ: не удалось определить текущую неделю');
+  if (/неч[её]т/i.test(m[1])) return 'odd';
   return /ч[её]т/i.test(m[1]) ? 'even' : 'odd';
 }
 
@@ -136,7 +137,7 @@ function parseSchedule(html, fallbackWeek = 'odd') {
       if (timeCell && timeCell.text) currentTime = timeCell.text.replace(/[–—]/g, '-');
       if (day === null || !currentTime) continue;
 
-      const classCell = cells.find(c => classHas(c.attrs, 'schclass'));
+      const classCell = cells.find(c => classHas(c.attrs, 'schname')) || cells.find(c => classHas(c.attrs, 'schclass'));
       const teacherCell = cells.find(c => classHas(c.attrs, 'schteacher'));
       if (!classCell && !teacherCell) continue;
 
@@ -186,7 +187,7 @@ function parseSchedule(html, fallbackWeek = 'odd') {
   for (const r of rows) {
     if (r.week) continue;
     const count = slotCounts.get(r._slotKey) || 0;
-    if (count === 1) r.week = fallbackWeek === 'even' ? 'even' : 'odd';
+    if ((occurrence.get(r._slotKey) || count) === 1) r.week = fallbackWeek === 'even' ? 'even' : 'odd';
     else r.week = (r._idx % 2 === 1) ? 'even' : 'odd';
     delete r._slotKey;
     delete r._idx;
@@ -214,7 +215,7 @@ async function fetchText(url, options, jar) {
   headers.set('Accept', 'text/html,application/xhtml+xml');
   headers.set('Referer', BASE);
   if (jar.cookie) headers.set('Cookie', jar.cookie);
-  const response = await fetch(url, { ...options, headers, redirect: 'follow' });
+  const response = await fetch(url, { ...options, headers, redirect: 'follow', signal: AbortSignal.timeout(15000) });
   const set = response.headers.getSetCookie ? response.headers.getSetCookie() : response.headers.get('set-cookie');
   const next = cookieHeader(set);
   if (next) jar.cookie = jar.cookie ? `${jar.cookie}; ${next}` : next;
@@ -257,13 +258,19 @@ async function getSchedule(params) {
 
   const page = await fetchText(`${BASE}?form=${encodeURIComponent(cfg.form)}`, { method: 'GET' }, jar);
   const currentWeek = parseCurrentWeek(page.text);
+  if (!params.period) {
+    const periodSelect = page.text.match(/<select\b[^>]*id=["']period["'][^>]*>([\s\S]*?)<\/select>/i);
+    const selected = periodSelect?.[1].match(/<option\b([^>]*\bselected[^>]*)>/i);
+    const currentPeriod = selected && attr(selected[1], 'value');
+    if (currentPeriod) cfg.period = currentPeriod;
+  }
 
   const groupResp = await fetchText(AJAX, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
     body: postForm({ namedata: 'group', faculty: cfg.faculty, level: cfg.level, period: cfg.period, form: cfg.form })
   }, jar);
-  const groupValue = findSelectedGroup(groupResp.text, cfg.group);
+  const groupValue = findSelectedGroup(groupResp.text, cfg.group) || findSelectedGroup(page.text, cfg.group);
   if (!groupValue) throw new Error(`Группа «${cfg.group}» не найдена для выбранных параметров`);
 
   const scheduleResp = await fetchText(AJAX, {
@@ -274,7 +281,7 @@ async function getSchedule(params) {
 
   const lessons = parseSchedule(scheduleResp.text, currentWeek);
   if (!lessons.length) throw new Error('БГТУ вернуло расписание, но распарсить занятия не удалось');
-  const data = { ok: true, source: 'БГТУ', group: cfg.group, currentWeek, lessons, fetchedAt: new Date().toISOString(), cached: false };
+  const data = { ok: true, source: 'БГТУ', group: cfg.group, currentWeek, period: cfg.period, lessons, fetchedAt: new Date().toISOString(), cached: false };
   scheduleCache.set(cacheKey, { at: Date.now(), data });
   return data;
 }
@@ -286,8 +293,10 @@ function json(res, status, payload) {
 }
 
 function server() {
+  const cloud = require('./cloud-server').createCloud();
   const s = http.createServer(async (req, res) => {
     try {
+      if (await cloud(req, res)) return;
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, service: 'starosta-bgtu' });
       if (req.method === 'GET' && url.pathname === '/api/bgtu/schedule') {
@@ -300,12 +309,21 @@ function server() {
         const files = {
           '/': ['index.html','text/html; charset=utf-8'],
           '/index.html': ['index.html','text/html; charset=utf-8'],
+          '/data/curriculum.json': ['data/curriculum.json','application/json; charset=utf-8'],
+          '/schedule.json': ['schedule.json','application/json; charset=utf-8'],
+          '/dialogs.js': ['dialogs.js','application/javascript; charset=utf-8'],
+          '/cloud.js': ['cloud.js','application/javascript; charset=utf-8'],
+          '/config.js': ['config.js','application/javascript; charset=utf-8'],
+          '/icon-180.png': ['icon-180.png','image/png'],
+          '/icon-192.png': ['icon-192.png','image/png'],
+          '/icon-512.png': ['icon-512.png','image/png'],
           '/sw.js': ['sw.js','application/javascript; charset=utf-8'],
           '/manifest.webmanifest': ['manifest.webmanifest','application/manifest+json; charset=utf-8']
         };
         const item = files[url.pathname];
         if (item) {
           const full = path.join(__dirname, item[0]);
+          if (!fs.existsSync(full) && url.pathname==='/data/curriculum.json'){res.writeHead(204,{'Cache-Control':'no-store'});return res.end();}
           if (!fs.existsSync(full)) return json(res, 404, { ok:false, error:`Файл ${item[0]} не найден` });
           const file = fs.readFileSync(full);
           res.writeHead(200, { 'Content-Type': item[1], 'Cache-Control': url.pathname === '/sw.js' ? 'no-store' : 'no-cache' });

@@ -377,6 +377,17 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 .bgtu-week .btn.active{box-shadow:0 0 0 2px var(--accent-soft),inset 0 1px 0 rgba(255,255,255,.22)}
 .bgtu-source{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:9px 2px 0}
 @media (max-width:379px){.bgtu-week{grid-template-columns:1fr}}
+/* Responsive layout: allow text and action groups to wrap at narrow widths. */
+.wrap{min-height:0;width:100%;padding-bottom:calc(var(--navh) + var(--safe-b) + 36px)}
+.row{flex-wrap:wrap}.row>input,.row>select{flex:1 1 150px;width:auto}.row>.btn{flex:1 1 160px}
+header .date-row{display:grid;grid-template-columns:44px minmax(0,1fr) 44px}header .date-row [data-act="today"]{grid-column:1/-1}
+.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.top,.stats{flex-wrap:wrap}.fio,.lesson .t{overflow-wrap:anywhere}
+.lesson .t b,.lesson .t small{white-space:normal;overflow:visible;text-overflow:clip}
+nav button{min-width:0}table.prev{table-layout:fixed}table.prev td{overflow-wrap:anywhere}
+#cloud-panel{width:calc(100% - 28px);max-width:688px!important}#cloud-panel form[hidden]{display:none!important}
+@media(max-width:379px){.grid2{grid-template-columns:minmax(0,1fr)}.marks{flex-wrap:wrap}.row>.btn{flex-basis:100%}}
+@media(min-width:540px){header .date-row{grid-template-columns:44px minmax(0,1fr) 44px auto}header .date-row [data-act="today"]{grid-column:auto}}
+nav button[hidden]{display:none}.semester-summary{display:flex;flex-wrap:wrap;gap:8px 16px}.semester-exam{background:var(--accent);color:#fff}
 </style>
 </head>
 <body>
@@ -387,13 +398,15 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
   <button data-tab="works"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M8.4 12.3l2.5 2.5 4.7-5.2"/></svg></i>Сдачи</button>
   <button data-tab="money"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6.4" width="18" height="11.2" rx="3"/><circle cx="12" cy="12" r="2.5"/><path d="M6.4 12h.01M17.6 12h.01"/></svg></i>Деньги</button>
   <button data-tab="group"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.2" cy="9" r="3.2"/><path d="M3.6 19.2c.6-3.3 2.9-5 5.6-5s5 1.7 5.6 5"/><path d="M15.8 6.8a3.2 3.2 0 010 5.4M17.4 14.6c1.9.7 3 2.3 3.4 4.4"/></svg></i>Группа</button>
+  <button data-tab="semester" id="semester-tab" hidden><i aria-hidden="true">▤</i>Семестр</button>
   <button data-tab="more"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h8M4 15.5h3.5"/><path d="M16.5 8.5H20M11.5 15.5H20"/><circle cx="14.2" cy="8.5" r="2.2"/><circle cx="9.2" cy="15.5" r="2.2"/></svg></i>Ещё</button>
 </nav>
 <div class="toast" id="toast"></div>
 
+<script src="config.js"></script>
 <script>
 /* ============================ ХРАНИЛИЩЕ ============================ */
-const APP_V = 10;
+const APP_V = 11;
 const KEY = 'starosta-o26-ist-sii-b';
 const store = {
   async get(k){
@@ -478,11 +491,11 @@ let _t;
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
   clearTimeout(_t); _t=setTimeout(()=>t.classList.remove('show'),1800); }
 let _sv;
-function save(){ clearTimeout(_sv); _sv=setTimeout(()=>store.set(KEY, JSON.stringify(S)), 120); }
+function save(){ if(window.cloudSave) window.cloudSave(); else {clearTimeout(_sv); _sv=setTimeout(()=>store.set(KEY, JSON.stringify(S)),120);} }
 function copy(txt, msg){
   const ok=()=>toast(msg||'Скопировано');
-  if(navigator.clipboard) navigator.clipboard.writeText(txt).then(ok,()=>prompt('Скопируй вручную:',txt));
-  else prompt('Скопируй вручную:',txt);
+  if(navigator.clipboard) navigator.clipboard.writeText(txt).then(ok,()=>askText('Скопируй вручную:',txt));
+  else askText('Скопируй вручную:',txt);
 }
 
 /* ============================ ПОДСЧЁТЫ ============================ */
@@ -509,6 +522,7 @@ function fundDebt(sid){
 }
 
 /* ============================ РЕНДЕР ============================ */
+let curriculum=[];
 function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
   const app=$('app');
@@ -524,6 +538,7 @@ function render(){
   if(tab==='works') app.innerHTML = viewWorks();
   if(tab==='money') app.innerHTML = viewMoney();
   if(tab==='group') app.innerHTML = viewGroup();
+  if(tab==='semester') app.innerHTML=viewSemester();
   if(tab==='more')  app.innerHTML = viewMore();
 }
 function head(title, sub, backTo){
@@ -538,17 +553,18 @@ function viewPairs(){
   ensureBGTULessonsForDate(curDate);
   const ls = lessonsOn(curDate);
   const d = dowOf(curDate);
-  let h = head('Пары', `${DOW[d]} · БГТУ: ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя`) + `
-    <div class="row">
+  let h = head('Пары', `${DOW[d]} · БГТУ: ${bgtuWeekLabel(bgtuCurrentWeekForDate(curDate))} неделя`) + `
+    <div class="row date-row">
       <button class="iconbtn" data-act="dshift" data-v="-1">‹</button>
       <input type="date" id="curDate" value="${curDate}">
       <button class="iconbtn" data-act="dshift" data-v="1">›</button>
       <button class="iconbtn" data-act="today">сегодня</button>
     </div></header>`;
 
+  if(S.schedule?.lastError)h+=`<p class="card" role="alert">${esc(S.schedule.lastError)}</p>`;
   h += `<ul>`;
   if(!ls.length){
-    h += `<div class="empty">На этот день пар нет.<br>Добавь вручную или подставь из шаблона недели.</div>`;
+    h += `<div class="empty">На этот день пар нет.<br>Выбери другую дату или проверь расписание в разделе «Ещё».</div>`;
   }
   ls.forEach(l=>{
     const a = S.att[l.id]||{};
@@ -558,12 +574,12 @@ function viewPairs(){
       <div class="lesson" data-act="openatt" data-id="${l.id}">
         <span class="pairno">${l.pair}</span>
         <span class="t"><b>${esc(subjName(l.subjectId))}</b>
-          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${l.room?' · ауд. '+esc(l.room):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
+          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${l.room?' · '+esc(l.room):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
         <span class="chip ${n?'bad':'ok'}">${n} Н</span>
         ${u?`<span class="chip warn">${u} У</span>`:''}
       </div>
       <div class="row">
-        <button class="btn ghost" data-act="openatt" data-id="${l.id}" style="flex:1">Отметить (был${was===S.students.length?'и все':'о '+was})</button>
+        <button class="btn ghost" data-act="openatt" data-id="${l.id}" style="flex:1">${window.cloudCanEdit?.()?`Отметить (был${was===S.students.length?'и все':'о '+was})`:'Посмотреть пару'}</button>
         <button class="iconbtn" data-act="editlesson" data-id="${l.id}">✎</button>
         <button class="iconbtn" data-act="dellesson" data-id="${l.id}">🗑</button>
       </div>
@@ -805,6 +821,22 @@ function viewStudent(){
 }
 
 /* ---------- ЕЩЁ ---------- */
+async function loadCurriculum(){
+  try{
+    const response=await fetch('./data/curriculum.json',{cache:'no-store'});
+    if(!response.ok || response.status===204)return;
+    const rows=await response.json();
+    if(!Array.isArray(rows)||!rows.length||!rows.every(r=>r&&typeof r.name==='string'&&typeof r.code==='string'&&['Экзамен','Зачёт','ЗачётСОценкой'].includes(r.control)&&[null,'КП','КР'].includes(r.extra)&&['lek','lab','pr','ze'].every(k=>Number.isFinite(r[k])&&r[k]>=0)))return;
+    curriculum=rows;$('semester-tab').hidden=false;measureSoon();
+  }catch{} // Optional static data: no unhandled errors, tab remains hidden.
+}
+function viewSemester(){
+  const n=control=>curriculum.filter(r=>r.control===control).length;
+  let h=head('Семестр','1 курс · 1 семестр · О-26-ИСТ-СИИ-Б')+'</header>';
+  h+='<div class="card semester-summary"><span>'+plural(n('Экзамен'),'экзамен','экзамена','экзаменов')+'</span><span>'+plural(n('Зачёт')+n('ЗачётСОценкой'),'зачёт','зачёта','зачётов')+'</span><span>'+curriculum.filter(r=>r.extra).length+' курсовых</span><span>'+curriculum.reduce((s,r)=>s+r.ze,0)+' з.е.</span></div><p class="hint">По дисциплинам, подтверждённым расписанием. Часы: лекции / лабораторные / практические.</p><ul>';
+  for(const r of curriculum)h+='<li class="card"><div class="grp">'+esc(r.code)+' · '+r.ze+' з.е.</div><div class="fio"><b>'+esc(r.name)+'</b></div><div class="chips"><span class="chip '+(r.control==='Экзамен'?'semester-exam':r.control==='ЗачётСОценкой'?'warn':'ok')+'">'+(r.control==='ЗачётСОценкой'?'Зачёт с оценкой':esc(r.control))+'</span>'+(r.extra?'<span class="chip warn">'+esc(r.extra)+'</span>':'')+'</div><p class="hint">Лек: '+r.lek+' · Лаб: '+r.lab+' · Пр: '+r.pr+' ч.<br>Кафедра '+esc(r.kafedra)+'</p></li>';
+  return h+'</ul>';
+}
 function viewMore(){
   return head('Ещё') + `</header>
     <ul>
@@ -853,19 +885,22 @@ function bgtuTpls(week){
   return (S.tpl||[]).filter(t=>t.source==='bgtu' && (t.week||'odd')===week);
 }
 function bgtuCurrentWeekForDate(iso){
-  const dow = dowOf(iso);
-  const candidates = bgtuTpls(S.schedule?.week==='even'?'even':'odd').filter(t=>t.dow===dow);
-  return candidates.length ? (S.schedule?.week||'odd') : (S.schedule?.week||'odd');
+  const anchor=S.schedule?.weekAnchor || todayISO();
+  const monday=d=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7));return t.getTime();};
+  const weeks=Math.round((monday(iso)-monday(anchor))/604800000);
+  const base=S.schedule?.currentWeek || S.schedule?.week || 'odd';
+  return Math.abs(weeks)%2 ? (base==='odd'?'even':'odd') : base;
 }
 
 function ensureBGTULessonsForDate(iso){
-  const week = S.schedule?.week==='even'?'even':'odd';
+  
+  const week = bgtuCurrentWeekForDate(iso);
   const dow = dowOf(iso);
   const rows = bgtuTpls(week).filter(t=>t.dow===dow).sort((a,b)=>(a.pair||99)-(b.pair||99));
   if(!rows.length) return 0;
   let made=0;
   for(const t of rows){
-    const exists=S.lessons.some(l=>l.date===iso && l.source==='bgtu' && l.pair===t.pair && l.week===week);
+    const exists=S.lessons.some(l=>l.date===iso && l.source==='bgtu' && l.time===t.time && l.subjectId===t.subjectId && l.week===week);
     if(exists) continue;
     S.lessons.push({id:uid('l'),date:iso,pair:t.pair,subjectId:t.subjectId,kind:t.kind||'',room:t.room||'',teacherId:t.teacherId||'',week,time:t.time||'',source:'bgtu'});
     made++;
@@ -927,9 +962,12 @@ function applyBGTUSchedule(data){
     made++;
   }
 
-  S.schedule.lastSyncAt=new Date().toLocaleString('ru-RU');
+  S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
+  S.schedule.fetchedAt=data.fetchedAt;
+  if(data.period){const parts=data.period.split('_');S.schedule.year=parts[0];S.schedule.semester=Number(parts[1])||1;}
   S.schedule.currentWeek=data.currentWeek==='even'?'even':'odd';
   S.schedule.week=S.schedule.currentWeek;
+  S.schedule.weekAnchor=new Date(data.fetchedAt).toLocaleDateString('sv-SE',{timeZone:'Europe/Moscow'});
   S.schedule.lastError='';
   S.schedule.remote=data.source||'БГТУ';
 
@@ -941,11 +979,15 @@ function applyBGTUSchedule(data){
 }
 
 async function syncBGTU(){
+  if(window.cloudScheduleBlocked?.())return toast('Сначала сохрани черновик и разреши конфликт с облаком');
   if(ctx.bgtuBusy) return;
+  const targetState=S;
+  let timer;
   ctx.bgtuBusy=true;
   ctx.bgtuError='';
   render();
   try{
+    if(location.protocol==='file:')throw new Error('Открой сайт через localhost или GitHub Pages, а не файлом.');
     const q=new URLSearchParams({
       group:S.schedule?.group||'О-26-ИСТ-СИИ-Б',
       faculty:S.schedule?.faculty||'Факультет информационных технологий',
@@ -955,20 +997,25 @@ async function syncBGTU(){
       week:'all'
     });
     const ac=new AbortController();
-    const timer=setTimeout(()=>ac.abort(),20000);
-    const res=await fetch(`/api/bgtu/schedule?${q.toString()}`,{method:'GET',cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
+    timer=setTimeout(()=>ac.abort(),20000);
+    const endpoint=window.STAROSTA_STATIC_SCHEDULE?'./schedule.json':`${window.STAROSTA_API||''}/api/bgtu/schedule?${q.toString()}`;
+    const res=await fetch(endpoint,{method:'GET',cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
     clearTimeout(timer);
+    if(res.status===404)throw new Error('Файл расписания не найден (404). Проверь, что schedule.json опубликован рядом с index.html.');
     let data=null;
     try{ data=await res.json(); }catch(e){ throw new Error(`Сервер вернул не JSON (${res.status})`); }
     if(!res.ok || !data.ok) throw new Error(data?.error||`Ошибка сервера: ${res.status}`);
+    if(S!==targetState)return;
+    if(data.fetchedAt && data.fetchedAt===S.schedule?.fetchedAt){if(S.schedule.lastError){S.schedule.lastError='';save();}return;}
     applyBGTUSchedule(data);
   }catch(e){
-    ctx.bgtuError=e?.name==='AbortError'?'БГТУ не ответил за 20 секунд.':(e?.message||'Не удалось обновить расписание');
+    ctx.bgtuError=e?.name==='AbortError'?'Загрузка расписания превысила 20 секунд.':e instanceof TypeError?'Не удалось подключиться к расписанию. Проверь интернет и доступность сайта.':(e?.message||'Не удалось обновить расписание');
     if(S.schedule) S.schedule.lastError=ctx.bgtuError;
     save(); render();
     toast('Не удалось обновить расписание');
   }finally{
-    ctx.bgtuBusy=false;
+    clearTimeout(timer);
+    ctx.bgtuBusy=false; render();
   }
 }
 
@@ -990,18 +1037,19 @@ function viewBGTU(){
       <button class="btn ghost ${m.week==='even'?'active':''}" data-act="setweek" data-v="even">Чётная</button>
     </div>
     <div class="row"><button class="btn wide" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled':''}>${ctx.bgtuBusy?'Обновляю…':'↻ Обновить расписание'}</button></div>
+    ${m.fetchedAt && Date.now()-Date.parse(m.fetchedAt)>86400000?`<p class="hint" style="color:var(--warn)">Данные старше суток — проверь изменения на сайте БГТУ.</p>`:''}
     ${m.lastSyncAt?`<p class="bgtu-source">Последнее обновление: ${esc(m.lastSyncAt)}</p>`:'<p class="bgtu-source">Расписание ещё не синхронизировано.</p>'}
     ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}
-    ${(ctx.bgtuError||m.lastError)?`<div class="card"><p class="hint" style="color:var(--bad)">${esc(ctx.bgtuError||m.lastError)}<br><span style="color:var(--ink-soft)">Проверь, что сервер приложения запущен и есть доступ к интернету.</span></p></div>`:''}
+    ${(ctx.bgtuError||m.lastError)?`<div class="card"><p class="hint" style="color:var(--bad)">${esc(ctx.bgtuError||m.lastError)}<br><span style="color:var(--ink-soft)">Проверь интернет. Если ошибка повторяется, открой официальный сайт БГТУ.</span></p></div>`:''}
   </div>`;
-  h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||'О-26-ИСТ-СИИ-Б')}. Сервер сам получает список групп и затем расписание БГТУ. Нечётная и чётная недели хранятся отдельно.</p></div>`;
+  h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||'О-26-ИСТ-СИИ-Б')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
   if(hasData){
     const rows=(m.week==='even'?bgtuTpls('even'):bgtuTpls('odd')).sort((a,b)=>a.dow-b.dow || a.pair-b.pair);
     h+=`<h2>${bgtuWeekLabel(m.week)} неделя · превью</h2><ul>`;
-    rows.slice(0,12).forEach(r=>{
+    rows.forEach(r=>{
       h+=`<li class="card"><div class="top"><span class="pairno">${r.pair||'—'}</span><span class="fio"><b>${esc(DOW[r.dow]||'')}</b><small>${esc(r.time||'')}${r.subjectId?` · ${esc(subjName(r.subjectId))}`:''}${r.teacherId?` · ${esc(initials(teachName(r.teacherId)))}`:''}${r.room?' · '+esc(r.room):''}</small></span></div></li>`;
     });
-    if(rows.length>12) h+=`<div class="empty">…и ещё ${rows.length-12}</div>`;
+
     h+=`</ul>`;
   }
   h+=`<div class="row"><button class="btn ghost wide" data-act="openbgtu">Открыть официальный сайт БГТУ</button></div>`;
@@ -1176,7 +1224,7 @@ async function runOCR(){
 }
 
 /* ============================ ДЕЙСТВИЯ ============================ */
-document.addEventListener('click', e=>{
+document.addEventListener('click', async e=>{
   const nb = e.target.closest('#nav button');
   if(nb){ tab=nb.dataset.tab; view=null; ctx={}; return render(); }
   const btn = e.target.closest('[data-act]');
@@ -1194,7 +1242,7 @@ document.addEventListener('click', e=>{
     case 'openatt': view='att'; ctx.lesson=btn.dataset.id; break;
     case 'mark': { const a=attOf(ctx.lesson); const v=btn.dataset.v;
       if(a[sid]===v) delete a[sid]; else a[sid]=v; save(); break; }
-    case 'clearatt': if(confirm('Снять все отметки на этой паре?')){ S.att[ctx.lesson]={}; save(); } break;
+    case 'clearatt': if(await askConfirm('Снять все отметки на этой паре?')){ S.att[ctx.lesson]={}; save(); } break;
     case 'attreport': { const l=S.lessons.find(x=>x.id===ctx.lesson); const a=S.att[l.id]||{};
       const nn=S.students.filter(s=>a[s.id]==='n'), uu=S.students.filter(s=>a[s.id]==='u');
       copy(`${S.group} · ${fmtDate(l.date)} · ${l.pair} пара · ${subjName(l.subjectId)}\n`+
@@ -1204,11 +1252,11 @@ document.addEventListener('click', e=>{
     case 'addlesson': {
       if(!S.subjects.length) return toast('Сначала добавь предметы');
       const list = S.subjects.map((p,i)=>`${i+1}. ${p.name}`).join('\n');
-      const pick = prompt('Предмет — номер из списка:\n'+list, '1'); if(!pick) return;
+      const pick = await askText('Предмет — номер из списка:\n'+list, '1'); if(!pick) return;
       const p = S.subjects[+pick-1]; if(!p) return toast('Нет такого номера');
-      const pair = prompt('Номер пары', '1'); if(!pair) return;
-      const kind = prompt('Тип: '+KINDS.join(' / '), 'практика')||'';
-      const room = prompt('Аудитория (можно пусто)','')||'';
+      const pair = await askText('Номер пары', '1'); if(!pair) return;
+      const kind = await askText('Тип: '+KINDS.join(' / '), 'практика')||'';
+      const room = await askText('Аудитория (можно пусто)','')||'';
       S.lessons.push({id:uid('l'),date:curDate,pair:+pair,subjectId:p.id,kind,room,teacherId:p.teacherId||''});
       save(); break; }
     case 'editlesson': {
@@ -1217,14 +1265,14 @@ document.addEventListener('click', e=>{
       if(!S.subjects.length) return toast('Сначала добавь предметы');
       const list = S.subjects.map((p,i)=>`${i+1}. ${p.name}`).join('\n');
       const cur = S.subjects.findIndex(p=>p.id===l.subjectId) + 1;
-      const pick = prompt('Предмет — номер из списка:\n'+list, String(cur||1));
+      const pick = await askText('Предмет — номер из списка:\n'+list, String(cur||1));
       if(pick===null) return;
       const p = S.subjects[+pick-1];
       if(!p) return toast('Нет такого номера');
-      const pair = prompt('Номер пары', String(l.pair)); if(pair===null) return;
-      const kind = prompt('Тип: '+KINDS.join(' / '), l.kind||''); if(kind===null) return;
-      const room = prompt('Аудитория (можно пусто)', l.room||''); if(room===null) return;
-      const date = prompt('Дата в формате ГГГГ-ММ-ДД', l.date); if(date===null) return;
+      const pair = await askText('Номер пары', String(l.pair)); if(pair===null) return;
+      const kind = await askText('Тип: '+KINDS.join(' / '), l.kind||''); if(kind===null) return;
+      const room = await askText('Аудитория (можно пусто)', l.room||''); if(room===null) return;
+      const date = await askText('Дата в формате ГГГГ-ММ-ДД', l.date); if(date===null) return;
       l.subjectId = p.id;
       l.pair = +pair || l.pair;
       l.kind = kind.trim();
@@ -1234,11 +1282,11 @@ document.addEventListener('click', e=>{
         if(l.date !== curDate){ curDate = l.date; view = null; }
       } else if(date.trim() !== l.date){ toast('Дату не понял — оставил прежнюю'); }
       save(); break; }
-    case 'dellesson': if(confirm('Удалить пару вместе с отметками?')){
+    case 'dellesson': if(await askConfirm('Удалить пару вместе с отметками?')){
       const id=btn.dataset.id; S.lessons=S.lessons.filter(l=>l.id!==id); delete S.att[id]; save(); } break;
     case 'fromtpl': {
       const d=dowOf(curDate);
-      const selectedWeek = S.schedule?.week || 'odd';
+      const selectedWeek = bgtuCurrentWeekForDate(curDate);
       const rows=S.tpl.filter(t=>t.dow===d && (!t.week || t.week===selectedWeek));
       if(!rows.length) return toast('В шаблоне нет пар на '+DOW[d]);
       let k=0;
@@ -1263,12 +1311,12 @@ document.addEventListener('click', e=>{
     case 'addwork': {
       if(!S.subjects.length) return toast('Сначала добавь предметы');
       const list=S.subjects.map((p,i)=>`${i+1}. ${p.name}`).join('\n');
-      const pick=prompt('Предмет — номер:\n'+list,'1'); if(!pick) return;
+      const pick=await askText('Предмет — номер:\n'+list,'1'); if(!pick) return;
       const p=S.subjects[+pick-1]; if(!p) return toast('Нет такого номера');
-      const name=prompt('Название работы','Лабораторная 1'); if(!name) return;
-      const due=prompt('Дедлайн в формате ГГГГ-ММ-ДД (можно пусто)','')||'';
+      const name=await askText('Название работы','Лабораторная 1'); if(!name) return;
+      const due=await askText('Дедлайн в формате ГГГГ-ММ-ДД (можно пусто)','')||'';
       S.works.push({id:uid('w'),subjectId:p.id,name:name.trim(),due:due.trim()}); save(); break; }
-    case 'delwork': if(confirm('Удалить работу вместе с отметками?')){
+    case 'delwork': if(await askConfirm('Удалить работу вместе с отметками?')){
       delete S.subs[ctx.work]; S.works=S.works.filter(w=>w.id!==ctx.work); view=null; save(); } break;
     case 'workreport': { const w=S.works.find(x=>x.id===ctx.work); const m=S.subs[w.id]||{};
       const line=s=>{ const c=m[s.id]||{}; return `${c.s==='y'?'+':c.s==='n'?'−':'·'} ${s.fio}`+
@@ -1278,10 +1326,10 @@ document.addEventListener('click', e=>{
     case 'openfund': view='fund'; ctx.fund=btn.dataset.id; break;
     case 'pay': { const f=S.funds.find(x=>x.id===ctx.fund); const p=paysOf(f.id);
       p[sid] = (p[sid]||0)>=(f.per||0) ? 0 : (f.per||0); save(); break; }
-    case 'addfund': { const name=prompt('На что собираем?','На нужды группы'); if(!name) return;
-      const per=prompt('Сколько с человека, ₽','200'); if(per===null) return;
+    case 'addfund': { const name=await askText('На что собираем?','На нужды группы'); if(!name) return;
+      const per=await askText('Сколько с человека, ₽','200'); if(per===null) return;
       S.funds.push({id:uid('f'),name:name.trim(),per:+per||0}); save(); break; }
-    case 'delfund': if(confirm('Удалить сбор?')){ delete S.pays[ctx.fund];
+    case 'delfund': if(await askConfirm('Удалить сбор?')){ delete S.pays[ctx.fund];
       S.funds=S.funds.filter(f=>f.id!==ctx.fund); view=null; save(); } break;
     case 'fundreport': { const f=S.funds.find(x=>x.id===ctx.fund); const p=S.pays[f.id]||{};
       const debt=S.students.filter(s=>(p[s.id]||0)<(f.per||0));
@@ -1289,10 +1337,10 @@ document.addEventListener('click', e=>{
         (debt.map(s=>initials(s.fio)+((p[s.id]||0)?` (${p[s.id]})`:'')).join(', ')||'нет'),'Список должников в буфере'); return; }
 
     case 'openstud': view='student'; ctx.stud=btn.dataset.id; break;
-    case 'addstud': { const fio=prompt('ФИО полностью'); if(!fio) return;
+    case 'addstud': { const fio=await askText('ФИО полностью'); if(!fio) return;
       S.students.push({id:uid('s'),fio:fio.trim(),phone:'',tg:'',note:''});
       S.students.sort((a,b)=>a.fio.localeCompare(b.fio,'ru')); save(); break; }
-    case 'delstud': if(confirm('Удалить человека из группы?')){
+    case 'delstud': if(await askConfirm('Удалить человека из группы?')){
       S.students=S.students.filter(x=>x.id!==ctx.stud); view=null; save(); } break;
     case 'msgstud': { const s=stud(ctx.stud); const {n,u}=missCount(s.id); const dw=debtWorks(s.id);
       copy(`${s.fio}\nПропуски: ${n} Н, ${u} У\nНе сдано: ${dw.length?dw.map(w=>w.name).join(', '):'всё сдано'}\n`+
@@ -1305,40 +1353,40 @@ document.addEventListener('click', e=>{
 
     case 'goimport': view='import'; ctx={imode:'people',raw:'',rows:null}; break;
     case 'gobgtu': view='bgtu'; break;
-    case 'setweek': { if(S.schedule) S.schedule.week=btn.dataset.v; save(); ensureBGTULessonsForDate(curDate); break; }
+    case 'setweek': { if(S.schedule) S.schedule.week=btn.dataset.v; break; }
     case 'syncbgtu': syncBGTU(); return;
     case 'openbgtu': window.open('https://www.tu-bryansk.ru/education/schedule/','_blank','noopener'); return;
     case 'importbgtu': importBGTU(); return;
     case 'godir': view='dir'; ctx.dir=btn.dataset.v; break;
     case 'gotpl': view='tpl'; break;
     case 'adddir': {
-      if(ctx.dir==='teachers'){ const fio=prompt('ФИО преподавателя'); if(!fio) return;
-        const dept=prompt('Кафедра или предмет','')||'';
+      if(ctx.dir==='teachers'){ const fio=await askText('ФИО преподавателя'); if(!fio) return;
+        const dept=await askText('Кафедра или предмет','')||'';
         S.teachers.push({id:uid('t'),fio:fio.trim(),dept,contact:'',note:''}); }
-      else { const name=prompt('Название предмета'); if(!name) return;
-        const control=prompt('Форма контроля: зачёт / экзамен / дифзачёт','')||'';
+      else { const name=await askText('Название предмета'); if(!name) return;
+        const control=await askText('Форма контроля: зачёт / экзамен / дифзачёт','')||'';
         S.subjects.push({id:uid('p'),name:name.trim(),control,teacherId:''}); }
       save(); break; }
     case 'editdir': { const id=btn.dataset.id;
       if(ctx.dir==='teachers'){ const t=S.teachers.find(x=>x.id===id);
-        const fio=prompt('ФИО',t.fio); if(fio){ t.fio=fio.trim(); t.dept=prompt('Кафедра или предмет',t.dept)||t.dept; } }
+        const fio=await askText('ФИО',t.fio); if(fio){ t.fio=fio.trim(); t.dept=await askText('Кафедра или предмет',t.dept)||t.dept; } }
       else { const p=S.subjects.find(x=>x.id===id);
-        const name=prompt('Название',p.name); if(name){ p.name=name.trim(); p.control=prompt('Форма контроля',p.control)||p.control; } }
+        const name=await askText('Название',p.name); if(name){ p.name=name.trim(); p.control=await askText('Форма контроля',p.control)||p.control; } }
       save(); break; }
     case 'deldir': { const id=btn.dataset.id;
-      if(!confirm('Удалить?')) return;
+      if(!await askConfirm('Удалить?')) return;
       if(ctx.dir==='teachers') S.teachers=S.teachers.filter(x=>x.id!==id);
       else S.subjects=S.subjects.filter(x=>x.id!==id);
       save(); break; }
     case 'addtpl': {
       if(!S.subjects.length) return toast('Сначала добавь предметы');
-      const dw=prompt('День недели: 1 пн, 2 вт, 3 ср, 4 чт, 5 пт, 6 сб','1'); if(!dw) return;
+      const dw=await askText('День недели: 1 пн, 2 вт, 3 ср, 4 чт, 5 пт, 6 сб','1'); if(!dw) return;
       const list=S.subjects.map((p,i)=>`${i+1}. ${p.name}`).join('\n');
-      const pick=prompt('Предмет — номер:\n'+list,'1'); if(!pick) return;
+      const pick=await askText('Предмет — номер:\n'+list,'1'); if(!pick) return;
       const p=S.subjects[+pick-1]; if(!p) return toast('Нет такого номера');
-      const pair=prompt('Номер пары','1'); if(!pair) return;
-      const kind=prompt('Тип: '+KINDS.join(' / '),'практика')||'';
-      const room=prompt('Аудитория','')||'';
+      const pair=await askText('Номер пары','1'); if(!pair) return;
+      const kind=await askText('Тип: '+KINDS.join(' / '),'практика')||'';
+      const room=await askText('Аудитория','')||'';
       S.tpl.push({id:uid('x'),dow:+dw,pair:+pair,subjectId:p.id,kind,room}); save(); break; }
     case 'deltpl': S.tpl=S.tpl.filter(t=>t.id!==btn.dataset.id); save(); break;
 
@@ -1357,7 +1405,7 @@ document.addEventListener('click', e=>{
 document.addEventListener('change', e=>{
   const t=e.target, act=t.dataset.act;
   const li=t.closest('li[data-id]'); const sid=li?li.dataset.id:null;
-  if(t.id==='curDate'){ curDate=t.value; return render(); }
+  if(t.id==='curDate'){ if(!t.value)return; curDate=t.value; return render(); }
   if(t.id==='imode'){ ctx.imode=t.value; ctx.rows=null; return render(); }
   if(act==='note'){ const m=subsOf(ctx.work); const c=m[sid]||(m[sid]={s:null,mark:'',note:''});
     c.mark=''; c.note=t.value.trim(); save(); return render(); }
@@ -1410,9 +1458,9 @@ function restore(){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
   inp.onchange=()=>{ const f=inp.files[0]; if(!f) return;
     const fr=new FileReader();
-    fr.onload=()=>{ try{ const d=JSON.parse(fr.result);
+    fr.onload=async()=>{ try{ const d=JSON.parse(fr.result);
         if(!d.students) throw new Error('не тот файл');
-        if(!confirm('Заменить все текущие данные содержимым файла?')) return;
+        if(!await askConfirm('Заменить все текущие данные содержимым файла?')) return;
         S=Object.assign(fresh(),d); save(); view=null; render(); toast('Данные восстановлены');
       }catch(e){ toast('Файл не подошёл'); } };
     fr.readAsText(f); };
@@ -1456,9 +1504,11 @@ document.addEventListener('focusin', measureSoon);
 document.addEventListener('focusout', ()=>setTimeout(measure,120));
 
 /* ============================ СТАРТ ============================ */
-(async function(){
+async function startApp(){
+  void loadCurriculum();
   const raw = await store.get(KEY);
   if(raw){ try{ S = Object.assign(fresh(), JSON.parse(raw)); }catch(e){} }
+  await window.cloudInit();
   render();
   measure();
   if(window.ResizeObserver) new ResizeObserver(measureSoon).observe($('nav'));
@@ -1471,7 +1521,9 @@ document.addEventListener('focusout', ()=>setTimeout(measure,120));
     });
     navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
   }
-})();
+}
 </script>
+<script src="dialogs.js"></script>
+<script src="cloud.js"></script>
 </body>
 </html>
