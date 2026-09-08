@@ -24,8 +24,13 @@ jobs:
         with:
           node-version: '22'
       - run: npm test
+      - name: Restore last published snapshot
+        run: node scripts/restore-schedule.cjs
+        continue-on-error: true
       - name: Fetch official schedule
+        id: schedule
         run: node scripts/update-schedule.cjs
+        continue-on-error: true
       - name: Publish schedule snapshot to Supabase
         run: node scripts/publish-schedule.cjs
       - name: Build static site only
@@ -36,3 +41,8 @@ jobs:
           path: _site
       - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
         id: deployment
+      - name: Report BGTU refresh failure
+        if: steps.schedule.outcome == 'failure'
+        run: |
+          echo '::error::BGTU refresh failed. Previous snapshot and its original timestamp were preserved; site deployment completed.'
+          exit 1
