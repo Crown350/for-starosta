@@ -791,8 +791,10 @@ function doImport(){
 async function runOCR(){
   const inp = document.createElement('input');
   inp.type='file'; inp.accept='image/*';
+  inp.hidden=true; document.body.appendChild(inp);
+  inp.oncancel=()=>inp.remove();
   inp.onchange = async () => {
-    const f = inp.files[0]; if(!f) return;
+    const f = inp.files[0]; inp.remove(); if(!f) return;
     const box = $('ocrbox');
     box.innerHTML = `<div class="card"><div class="hint">Готовлю распознавание…</div><progress id="pg" value="0" max="1"></progress></div>`;
     try{
