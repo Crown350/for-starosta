@@ -571,70 +571,40 @@ function applyBGTUSchedule(data){
   ensureBGTULessonsForDate(curDate);
   save();
   render();
-  toast(`Расписание обновлено: ${made}`);
+  
   return {made,addedSubjects,addedTeachers};
 }
 
-async function syncBGTU(){
-  if(window.cloudScheduleBlocked?.())return toast('Сначала сохрани черновик и разреши конфликт с облаком');
-  if(ctx.bgtuBusy) return;
+async function loadScheduleSnapshot(){
+  if(window.cloudScheduleBlocked?.())return;
   const targetState=S;
-    let timer;
-  ctx.bgtuBusy=true;
-    ctx.bgtuError='';
-    ctx.bgtuNotice='';
-  render();
+  async function load(url){
+    const ac=new AbortController();const timer=setTimeout(()=>ac.abort(),20000);
+    try{
+      const res=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
+      const data=await res.json();
+      if(!res.ok||!data?.ok||!Array.isArray(data.lessons)||!data.lessons.length||!Number.isFinite(Date.parse(data.fetchedAt)))throw new Error('Invalid schedule');
+      return data;
+    }finally{clearTimeout(timer);}
+  }
+  let data;
   try{
-    if(location.protocol==='file:')throw new Error('Открой сайт через localhost или GitHub Pages, а не файлом.');
-    const q=new URLSearchParams({
-      group:S.schedule?.group||'О-26-ИСТ-СИИ-Б',
-      faculty:S.schedule?.faculty||'Факультет информационных технологий',
-      level:S.schedule?.education||'бакалавр',
-      period:`${S.schedule?.year||'2026-2027'}_${S.schedule?.semester||1}_1`,
-      form:'очная',
-      week:'all'
-    });
-      async function load(endpoint,method='GET'){
-        const ac=new AbortController();
-        timer=setTimeout(()=>ac.abort(),20000);
-        try{
-          const res=await fetch(endpoint,{method,cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
-          if(res.status===404)throw new Error('Файл расписания не найден (404). Проверь, что schedule.json опубликован рядом с index.html.');
-          let data;
-          try{data=await res.json();}catch{throw new Error(`Сервер вернул не JSON (${res.status})`);}
-          if(!res.ok||!data?.ok||!Array.isArray(data.lessons)||!data.lessons.length||!Number.isFinite(Date.parse(data.fetchedAt)))throw new Error(data?.error||`Ошибка расписания: ${res.status}`);
-          return data;
-        }finally{clearTimeout(timer);}
-      }
-      let data,fallback=false;
-      if(window.STAROSTA_SUPABASE_URL){
-        try{data=await load(`${window.STAROSTA_SUPABASE_URL.replace(/\/$/,'')}/functions/v1/fetch-schedule`,'POST');}
-        catch{fallback=true;data=await load('./schedule.json');}
-      }else{
-        data=await load(window.STAROSTA_STATIC_SCHEDULE?'./schedule.json':`${window.STAROSTA_API||''}/api/bgtu/schedule?${q.toString()}`);
-      }
-      if(S!==targetState)return;
-      const older=Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||'');
-      const same=data.contentHash?data.contentHash===S.schedule?.contentHash:data.fetchedAt===S.schedule?.fetchedAt;
-      if(!older&&!same)applyBGTUSchedule(data);
-      if(!older){
-        S.schedule.fetchedAt=data.fetchedAt;
-        S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
-        S.schedule.contentHash=data.contentHash||null;
-      }
-      ctx.bgtuError=fallback?'Сервис расписания недоступен. Показан резервный снимок.':data.error||'';
-      S.schedule.lastError=ctx.bgtuError;
-      ctx.bgtuNotice=ctx.bgtuError?'Показано последнее доступное расписание':(!same&&!older?'Расписание изменилось':'Обновлено только что');
-      if(data.cached&&!ctx.bgtuError)ctx.bgtuNotice+=' · снимок из БД';
-      save();toast(ctx.bgtuNotice);
-  }catch(e){
-    ctx.bgtuError=e?.name==='AbortError'?'Загрузка расписания превысила 20 секунд.':e instanceof TypeError?'Не удалось подключиться к расписанию. Проверь интернет и доступность сайта.':(e?.message||'Не удалось обновить расписание');
-    if(S.schedule) S.schedule.lastError=ctx.bgtuError;
-    save(); render();
-    toast('Не удалось обновить расписание');
-  }finally{
-    clearTimeout(timer);
-    ctx.bgtuBusy=false; render();
+    if(window.STAROSTA_SUPABASE_URL){
+      try{data=await load(window.STAROSTA_SUPABASE_URL.replace(/\/$/,'')+'/functions/v1/fetch-schedule');}
+      catch{data=await load('./schedule.json');}
+    }else data=await load('./schedule.json');
+    if(S!==targetState||window.cloudScheduleBlocked?.())return;
+    if(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))return;
+    const same=data.contentHash?data.contentHash===S.schedule?.contentHash:data.fetchedAt===S.schedule?.fetchedAt;
+    if(!same)applyBGTUSchedule(data);
+    S.schedule.fetchedAt=data.fetchedAt;
+    S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
+    S.schedule.contentHash=data.contentHash||null;
+    S.schedule.lastError='';
+    save();render();
+  }catch{
+    // Offline/missing fallback never overwrites existing lessons or shows a toast.
+    if(S===targetState)render();
   }
 }
 
@@ -642,7 +612,7 @@ function viewBGTU(){
   const m=S.schedule||{};
   const odd=bgtuTpls('odd').length, even=bgtuTpls('even').length;
   const hasData=odd||even;
-    let h=head('Расписание БГТУ','официальные данные · проверка каждые 3 часа',1)+`</header>`;
+    let h=head('Расписание БГТУ','официальное расписание',1)+`</header>`;
   h+=`<div class="card">
     <div class="fio"><b>${esc(m.group||'О-26-ИСТ-СИИ-Б')}</b></div>
     <p class="bgtu-source">${esc(m.profile||'Системы искусственного интеллекта и обработка больших данных')} · ${esc(m.code||'09.03.02')} · ${esc(m.form||'Очное')}</p>
@@ -655,13 +625,9 @@ function viewBGTU(){
       <button class="btn ghost ${m.week==='odd'?'active':''}" data-act="setweek" data-v="odd">Нечётная</button>
       <button class="btn ghost ${m.week==='even'?'active':''}" data-act="setweek" data-v="even">Чётная</button>
     </div>
-      <div class="row"><button class="btn wide" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled aria-busy="true"':''}>${ctx.bgtuBusy?'<span class="schedule-spinner" aria-hidden="true"></span> Обновляю…':'↻ Обновить расписание'}</button></div>
-      ${ctx.bgtuNotice?`<p class="bgtu-source" role="status">${esc(ctx.bgtuNotice)}</p>`:''}
-      <p class="bgtu-source">Кнопка загружает последний снимок. Изменения БГТУ появляются с задержкой до 3 часов; при сбое обновления — дольше.</p>
-    ${m.fetchedAt && Date.now()-Date.parse(m.fetchedAt)>86400000?`<p class="hint" style="color:var(--warn)">Данные старше суток — проверь изменения на сайте БГТУ.</p>`:''}
-    ${m.lastSyncAt?`<p class="bgtu-source">Последнее обновление: ${esc(m.lastSyncAt)}</p>`:'<p class="bgtu-source">Расписание ещё не синхронизировано.</p>'}
+    <p class="bgtu-source ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'schedule-stale':''}">Обновлено: ${m.fetchedAt?esc(new Date(m.fetchedAt).toLocaleString('ru-RU')):'нет снимка'}</p>
+    ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
     ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}
-    ${(ctx.bgtuError||m.lastError)?`<div class="card"><p class="hint" style="color:var(--bad)">${esc(ctx.bgtuError||m.lastError)}<br><span style="color:var(--ink-soft)">Проверь интернет. Если ошибка повторяется, открой официальный сайт БГТУ.</span></p></div>`:''}
   </div>`;
   h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||'О-26-ИСТ-СИИ-Б')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
   if(hasData){
@@ -677,7 +643,6 @@ function viewBGTU(){
   return h;
 }
 
-function importBGTU(){ toast('Теперь расписание загружается автоматически — нажми «Обновить расписание».'); syncBGTU(); }
 
 function viewDir(){
   const isT = ctx.dir==='teachers';
@@ -979,9 +944,7 @@ document.addEventListener('click', async e=>{
     case 'goimport': view='import'; ctx={imode:'people',raw:'',rows:null}; break;
     case 'gobgtu': view='bgtu'; break;
     case 'setweek': { if(S.schedule) S.schedule.week=btn.dataset.v; break; }
-    case 'syncbgtu': syncBGTU(); return;
     case 'openbgtu': window.open('https://www.tu-bryansk.ru/education/schedule/','_blank','noopener'); return;
-    case 'importbgtu': importBGTU(); return;
     case 'godir': view='dir'; ctx.dir=btn.dataset.v; break;
     case 'gotpl': view='tpl'; break;
     case 'adddir': {

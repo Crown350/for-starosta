@@ -10,7 +10,7 @@ Deno.serve(async(req:Request)=>{
     if(!res.ok)throw new Error('cache');
     const cache=await res.json();
     if(!cache?.json)throw new Error('empty');
-    const stale=Date.now()-Date.parse(cache.fetched_at)>4*3600000;
-    return reply({...cache.json,ok:true,cached:true,upstreamRequested:false,fetchedAt:cache.fetched_at,changedAt:cache.changed_at,contentHash:cache.content_hash,sourceMode:'github-actions',refreshIntervalHours:3,stale,error:stale?'Снимок не обновлялся более четырёх часов. Показано последнее доступное расписание.':null});
+    const stale=Date.now()-Date.parse(cache.fetched_at)>6*3600000;
+    return reply({...cache.json,ok:true,cached:true,upstreamRequested:false,fetchedAt:cache.fetched_at,changedAt:cache.changed_at,contentHash:cache.content_hash,sourceMode:'database-snapshot',stale,error:null});
   }catch{return reply({ok:false,error:'Сервис расписания временно недоступен.'},503);}
 });

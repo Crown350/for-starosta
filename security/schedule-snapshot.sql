@@ -15,7 +15,7 @@ begin
     or jsonb_typeof(snapshot->'lessons') is distinct from 'array' then
     raise exception 'Invalid snapshot';
   end if;
-  if jsonb_array_length(snapshot->'lessons') not between 1 and 200 then raise exception 'Invalid lessons'; end if;
+  if jsonb_array_length(snapshot->'lessons') not between 10 and 200 then raise exception 'Invalid lessons'; end if;
   stamp:=(snapshot->>'fetchedAt')::timestamptz;
   if stamp is null or stamp>clock_timestamp()+interval '5 minutes' then raise exception 'Invalid timestamp'; end if;
   payload:=snapshot-'fetchedAt'-'cached'-'mock';

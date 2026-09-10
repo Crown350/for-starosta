@@ -390,8 +390,7 @@ nav button{min-width:0}table.prev{table-layout:fixed}table.prev td{overflow-wrap
 @media(max-width:379px){.grid2{grid-template-columns:minmax(0,1fr)}.marks{flex-wrap:wrap}.row>.btn{flex-basis:100%}}
 @media(min-width:540px){header .date-row{grid-template-columns:44px minmax(0,1fr) 44px auto}header .date-row [data-act="today"]{grid-column:auto}}
 nav button[hidden]{display:none}.semester-summary{display:flex;flex-wrap:wrap;gap:8px 16px}.semester-exam{background:var(--accent);color:#fff}
-.schedule-spinner{display:inline-block;width:1em;height:1em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:middle;animation:schedule-spin .8s linear infinite}
-@keyframes schedule-spin{to{transform:rotate(360deg)}}
+.schedule-stale{color:var(--warn);font-weight:600}
 </style>
 </head>
 <body>
@@ -408,9 +407,9 @@ nav button[hidden]{display:none}.semester-summary{display:flex;flex-wrap:wrap;ga
 <div class="toast" id="toast"></div>
 
 <script src="config.js"></script>
-<script src="app.js?v=schedule-snapshot-1"></script>
+<script src="app.js?v=automatic-schedule-1"></script>
 <script src="dialogs.js"></script>
 <script src="local-copy.js"></script>
-<script src="cloud.js"></script>
+<script src="cloud.js?v=automatic-schedule-1"></script>
 </body>
 </html>

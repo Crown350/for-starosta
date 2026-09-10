@@ -4,7 +4,7 @@
   let localBackup=null;
   const localCopy=new JournalLocalCopy(store,KEY);
   const privacyError=()=>status('Не удалось очистить копию устройства. Очисти данные сайта в браузере.');
-  const safeActions=new Set(['back','dshift','today','openatt','attreport','daysum','openwork','workreport','openfund','fundreport','openstud','msgstud','risk','gobgtu','openbgtu','godir','gotpl','csvatt','csvworks','backup','syncbgtu','setweek']);
+  const safeActions=new Set(['back','dshift','today','openatt','attreport','daysum','openwork','workreport','openfund','fundreport','openstud','msgstud','risk','gobgtu','openbgtu','godir','gotpl','csvatt','csvworks','backup','setweek']);
   window.cloudCanEdit=()=>ready && !!token && !conflict;
   window.cloudScheduleBlocked=()=>!!token && conflict;
   const panel=document.createElement('section');panel.id='cloud-panel';
@@ -52,7 +52,7 @@
     const data=await api('/api/state');revision=data.revision;
     S=data.data?Object.assign(fresh(),data.data):fresh();dirty=false;conflict=false;ready=true;
     status(data.data?'Загружено из облака · редактирование разрешено':'Облако пустое · добавь группу или перенеси данные устройства');
-    permissions();render();await syncBGTU();
+    permissions();render();await loadScheduleSnapshot();
   }
   async function push(){
     if(!dirty||writing||!window.cloudCanEdit())return;
@@ -67,7 +67,7 @@
     dirty=true;localCopy.save(JSON.stringify(S)).catch(privacyError);
     clearTimeout(timer);timer=setTimeout(async()=>{if(writing){timer=setTimeout(window.cloudSave,300);return;}await push();},350);
   };
-  window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));offline.checked=await localCopy.init();S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');await syncBGTU();};
+  window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));offline.checked=await localCopy.init();S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');await loadScheduleSnapshot();};
   document.getElementById('cloud-login').onsubmit=async e=>{
     e.preventDefault();token=document.getElementById('cloud-key').value.trim();document.getElementById('cloud-key').value='';status('Проверяю ключ…');
     try{await api('/api/session');await pull();}catch(error){token='';ready=false;status(error.message);permissions();}
