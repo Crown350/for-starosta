@@ -12,9 +12,9 @@ test('fallback is silent when Edge fails',async()=>{const urls=[];const c=await 
 test('unchanged snapshot advances freshness without replacing lessons',async()=>{const c=await run(async()=>response(snapshot),{contentHash:'hash-1',fetchedAt:'2026-09-09T10:00:00Z'});assert.equal(c.applied,undefined);assert.equal(c.S.schedule.fetchedAt,snapshot.fetchedAt);});
 test('older fallback and failed sources preserve current snapshot',async()=>{const old={fetchedAt:'2026-09-11T10:00:00Z'};let c=await run(async()=>response(snapshot),old);assert.equal(c.applied,undefined);c=await run(async()=>{throw Error('offline');},old);assert.equal(c.S.schedule,old);});
 test('invalid empty Edge response tries fallback',async()=>{const c=await run(async url=>response(url==='./schedule.json'?snapshot:{...snapshot,lessons:[]}));assert.ok(c.applied);});
-test('view marks only snapshots older than six hours and has no refresh control',()=>{
+test('view marks only snapshots older than six hours and keeps refresh control',()=>{
  const fn=source.slice(source.indexOf('function viewBGTU(){'),source.indexOf('function viewDir(){'));
- const c=vm.createContext({S:{schedule:{fetchedAt:new Date(Date.now()-7*3600000).toISOString()}},head:()=>'',bgtuTpls:()=>[],esc:String});vm.runInContext(fn,c);
- assert.match(c.viewBGTU(),/Снимок старше 6 часов/);assert.match(c.viewBGTU(),/Обновлено:/);assert.doesNotMatch(c.viewBGTU(),/syncbgtu|Обновить расписание/);
+ const c=vm.createContext({ctx:{},S:{schedule:{fetchedAt:new Date(Date.now()-7*3600000).toISOString()}},head:()=>'',bgtuTpls:()=>[],esc:String});vm.runInContext(fn,c);
+ assert.match(c.viewBGTU(),/Снимок старше 6 часов/);assert.match(c.viewBGTU(),/Обновлено:/);assert.match(c.viewBGTU(),/syncbgtu/);
  c.S.schedule.fetchedAt=new Date().toISOString();assert.doesNotMatch(c.viewBGTU(),/Снимок старше 6 часов/);
 });

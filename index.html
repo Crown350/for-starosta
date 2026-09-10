@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://piwxslgxwmdrehnomymt.supabase.co; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://piwxslgxwmdrehnomymt.supabase.co https://functions.yandexcloud.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Староста — О-26-ИСТ-СИИ-Б</title>
@@ -391,6 +391,9 @@ nav button{min-width:0}table.prev{table-layout:fixed}table.prev td{overflow-wrap
 @media(min-width:540px){header .date-row{grid-template-columns:44px minmax(0,1fr) 44px auto}header .date-row [data-act="today"]{grid-column:auto}}
 nav button[hidden]{display:none}.semester-summary{display:flex;flex-wrap:wrap;gap:8px 16px}.semester-exam{background:var(--accent);color:#fff}
 .schedule-stale{color:var(--warn);font-weight:600}
+.schedule-spinner{display:inline-block;width:1em;height:1em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:schedule-spin .8s linear infinite}
+.schedule-error{color:var(--bad)}
+@keyframes schedule-spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -406,10 +409,10 @@ nav button[hidden]{display:none}.semester-summary{display:flex;flex-wrap:wrap;ga
 </nav>
 <div class="toast" id="toast"></div>
 
-<script src="config.js"></script>
-<script src="app.js?v=automatic-schedule-1"></script>
+<script src="config.js?v=yandex-refresh-1"></script>
+<script src="app.js?v=yandex-refresh-1"></script>
 <script src="dialogs.js"></script>
 <script src="local-copy.js"></script>
-<script src="cloud.js?v=automatic-schedule-1"></script>
+<script src="cloud.js?v=yandex-refresh-1"></script>
 </body>
 </html>

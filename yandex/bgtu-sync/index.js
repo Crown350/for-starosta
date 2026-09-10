@@ -38,37 +38,58 @@ async function fetchSchedule(send=request){
   return payload({currentWeek,period,lessons});
 }
 
-async function sync({env=process.env,send=request,now=()=>new Date().toISOString()}={}){
+function output(cache,cached,changed=false,error=null){
+  return {...(cache.json||{}),ok:!!cache.json&&!error,lessons:cache.json?.lessons||[],cached,changed,error,
+    fetchedAt:cache.fetched_at,changedAt:cache.changed_at,contentHash:cache.content_hash,
+    last_attempt_at:cache.last_attempt_at,attemptCount:cache.attempt_count};
+}
+async function sync({env=process.env,send=request,now=()=>new Date().toISOString(),origin='http',triggerId=null}={}){
   const url=env.SUPABASE_URL;
   const key=env.SUPABASE_SERVICE_ROLE_KEY;
   if(!url||!/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(url)||!key||key.startsWith('sb_publishable_'))throw new Error('Задайте SUPABASE_URL и серверный SUPABASE_SERVICE_ROLE_KEY');
-  const snapshot=await fetchSchedule(send);
-  snapshot.fetchedAt=now();
   async function rpc(name,body){
     const headers={apikey:key,'Content-Type':'application/json'};
-    // New sb_secret keys belong in apikey; legacy service_role is also a JWT.
     if(!key.startsWith('sb_secret_'))headers.Authorization=`Bearer ${key}`;
     const response=await send(url.replace(/\/$/,'')+'/rest/v1/rpc/'+name,{method:'POST',headers,body:JSON.stringify(body)});
     return JSON.parse(response.text);
   }
-  const previous=await rpc('read_schedule_cache',{});
-  const contentHash=hash(payload(snapshot));
-  const comparedChanged=!previous?.json||hash(payload(previous.json))!==contentHash;
-  // The database atomically checks its own hash and prevents older runs overwriting newer ones.
-  // Unchanged JSON/changed_at stay intact; only fetched_at advances after a successful check.
-  const saved=await rpc('publish_schedule_snapshot',{snapshot});
-  if(!saved.ok)throw new Error('Supabase: снимок не принят');
-  return {ok:true,lessons:snapshot.lessons.length,changed:saved.changed,comparedChanged,ignored:!!saved.ignored,
-    fetchedAt:saved.fetchedAt||previous?.fetched_at,contentHash};
-}
-exports.handler=async()=>{
+  const claim=await rpc('claim_yandex_schedule',{origin,trigger_id:triggerId});
+  if(!claim.acquired)return output(claim.cache,true);
   try{
-    const result=await sync();console.log(JSON.stringify(result));
-    return {statusCode:200,headers:{'Content-Type':'application/json'},isBase64Encoded:false,body:JSON.stringify(result)};
+    const snapshot=await fetchSchedule(send);
+    snapshot.fetchedAt=now();
+    const comparedChanged=!claim.cache.json||hash(payload(claim.cache.json))!==hash(payload(snapshot));
+    const saved=await rpc('finish_yandex_schedule',{lease:claim.cache.request_token,snapshot});
+    return {...output(saved.cache,!!saved.superseded,saved.changed),comparedChanged};
   }catch(error){
-    // Never print request headers, environment values, response bodies or credentials.
-    const message=`bgtu-sync: ${error.code||error.message}`;
-    console.error(message);throw new Error(message);
+    const message=`Не удалось обновить БГТУ: ${error.code||error.message}`;
+    try{
+      const saved=await rpc('finish_yandex_schedule',{lease:claim.cache.request_token,failure:message});
+      return output(saved.cache,false,false,message);
+    }catch{return output(claim.cache,false,false,message);}
+  }
+}
+const cors={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',
+  'Access-Control-Allow-Origin':'https://crown350.github.io','Access-Control-Allow-Methods':'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers':'content-type'};
+const reply=(body,statusCode=200)=>({statusCode,headers:cors,isBase64Encoded:false,body:JSON.stringify(body)});
+exports.handler=async(event={},context={})=>{
+  const method=event.httpMethod;
+  if(method==='OPTIONS')return reply({},204);
+  if(method&&!['GET','POST'].includes(method))return reply({ok:false,error:'Метод не поддерживается'},405);
+  const metadata=!method&&event.messages?.[0]?.event_metadata;
+  const timer=metadata?.event_type==='yandex.cloud.events.serverless.triggers.TimerMessage';
+  const origin=timer?'timer':'http';
+  try{
+    const result=await sync({origin,triggerId:timer?metadata.trigger_id:null});
+    console.log(JSON.stringify({origin,triggerId:metadata?.trigger_id||null,requestId:context.requestId,
+      ok:result.ok,cached:result.cached,changed:result.changed,lessons:result.lessons.length,last_attempt_at:result.last_attempt_at,fetchedAt:result.fetchedAt}));
+    if(result.error){console.error(result.error);if(timer)throw new Error(result.error);}
+    return reply(result,result.ok?200:502);
+  }catch(error){
+    const message=`bgtu-sync: ${error.code||error.message}`;console.error(message);
+    if(timer)throw new Error(message);
+    return reply({ok:false,error:'Сервис расписания временно недоступен.'},502);
   }
 };
 exports.sync=sync;

@@ -608,6 +608,32 @@ async function loadScheduleSnapshot(){
   }
 }
 
+async function refreshBGTU(){
+  if(window.cloudScheduleBlocked?.())return toast('Сначала разреши конфликт с облаком');
+  if(ctx.bgtuBusy)return;
+  const targetState=S;
+  ctx.bgtuBusy=true;ctx.bgtuMessage='';ctx.bgtuFailed=false;render();
+  const ac=new AbortController();const timer=setTimeout(()=>ac.abort(),65000);
+  try{
+    if(!window.STAROSTA_YANDEX_FUNCTION_URL)throw new Error('Адрес функции расписания не настроен.');
+    const res=await fetch(window.STAROSTA_YANDEX_FUNCTION_URL,{cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
+    let data;try{data=await res.json();}catch{throw new Error('Сервис расписания вернул некорректный ответ.');}
+    if(!res.ok||!data.ok)throw new Error(data.error||data.errorMessage||`Сервис расписания недоступен (${res.status}).`);
+    if(!Array.isArray(data.lessons)||data.lessons.length<10||!Number.isFinite(Date.parse(data.fetchedAt)))throw new Error('Получен неполный снимок расписания. Старые данные сохранены.');
+    if(S!==targetState||window.cloudScheduleBlocked?.())return;
+    if(!(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))){
+      if(!data.contentHash||data.contentHash!==S.schedule?.contentHash)applyBGTUSchedule(data);
+      S.schedule.fetchedAt=data.fetchedAt;S.schedule.contentHash=data.contentHash||null;
+      S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');S.schedule.lastError='';save();
+    }
+    ctx.bgtuMessage=data.cached?'Проверено недавно, попробуй через минуту':data.changed?'Расписание изменилось':'Обновлено только что';
+  }catch(error){
+    if(S!==targetState)return;
+    ctx.bgtuFailed=true;
+    ctx.bgtuMessage=error.name==='AbortError'?'Ответ не получен за 65 секунд. Проверка на сервере может продолжаться. Попробуй позже.':error instanceof TypeError?'Не удалось связаться с Yandex. Проверь интернет и доступность функции.':error.message;
+  }finally{clearTimeout(timer);ctx.bgtuBusy=false;render();}
+}
+
 function viewBGTU(){
   const m=S.schedule||{};
   const odd=bgtuTpls('odd').length, even=bgtuTpls('even').length;
@@ -625,6 +651,8 @@ function viewBGTU(){
       <button class="btn ghost ${m.week==='odd'?'active':''}" data-act="setweek" data-v="odd">Нечётная</button>
       <button class="btn ghost ${m.week==='even'?'active':''}" data-act="setweek" data-v="even">Чётная</button>
     </div>
+    <button class="btn wide" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled aria-busy="true"':''}>${ctx.bgtuBusy?'<span class="schedule-spinner" aria-hidden="true"></span> Обновляю…':'Обновить расписание'}</button>
+    ${ctx.bgtuMessage?`<p class="bgtu-source ${ctx.bgtuFailed?'schedule-error':''}" role="status">${esc(ctx.bgtuMessage)}</p>`:''}
     <p class="bgtu-source ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'schedule-stale':''}">Обновлено: ${m.fetchedAt?esc(new Date(m.fetchedAt).toLocaleString('ru-RU')):'нет снимка'}</p>
     ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
     ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}
@@ -942,6 +970,7 @@ document.addEventListener('click', async e=>{
         bad.length?`Под угрозой: ${bad.length}`:'Все в порядке'); return; }
 
     case 'goimport': view='import'; ctx={imode:'people',raw:'',rows:null}; break;
+    case 'syncbgtu': refreshBGTU(); return;
     case 'gobgtu': view='bgtu'; break;
     case 'setweek': { if(S.schedule) S.schedule.week=btn.dataset.v; break; }
     case 'openbgtu': window.open('https://www.tu-bryansk.ru/education/schedule/','_blank','noopener'); return;
