@@ -1,3 +1,4 @@
+-- ВЫПОЛНЕНО 2026-09-08, повторный запуск откатит активные ключи на старые — не запускать.
 -- Rotation 2026-09-08. Only hashes are committed; plaintext keys are delivered privately.
 begin;
 update starosta_private.keys set active=false;
