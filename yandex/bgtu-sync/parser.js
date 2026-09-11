@@ -167,7 +167,7 @@ function parseSchedule(html, fallbackWeek = 'odd') {
   for (const r of rows) {
     if (r.week) continue;
     const count = slotCounts.get(r._slotKey) || 0;
-    if ((occurrence.get(r._slotKey) || count) === 1) r.week = fallbackWeek === 'even' ? 'even' : 'odd';
+    if ((occurrence.get(r._slotKey) || count) === 1) r.week = 'both';
     else r.week = (r._idx % 2 === 1) ? 'even' : 'odd';
     delete r._slotKey;
     delete r._idx;
@@ -175,7 +175,8 @@ function parseSchedule(html, fallbackWeek = 'odd') {
   }
 
   const seen = new Set();
-  return rows.filter(r => {
+  // Unsplit slots apply every week; retain the odd/even snapshot contract.
+  return rows.flatMap(r => r.week === 'both' ? [{...r, week:'odd'}, {...r, week:'even'}] : [r]).filter(r => {
     const key = [r.week, r.dow, r.time, normalize(r.subject), normalize(r.kind), normalize(r.teacher), normalize(r.room)].join('|');
     if (seen.has(key)) return false;
     seen.add(key);

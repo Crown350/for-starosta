@@ -187,7 +187,7 @@ function parseSchedule(html, fallbackWeek = 'odd') {
   for (const r of rows) {
     if (r.week) continue;
     const count = slotCounts.get(r._slotKey) || 0;
-    if ((occurrence.get(r._slotKey) || count) === 1) r.week = fallbackWeek === 'even' ? 'even' : 'odd';
+    if ((occurrence.get(r._slotKey) || count) === 1) r.week = 'both';
     else r.week = (r._idx % 2 === 1) ? 'even' : 'odd';
     delete r._slotKey;
     delete r._idx;
@@ -195,7 +195,8 @@ function parseSchedule(html, fallbackWeek = 'odd') {
   }
 
   const seen = new Set();
-  return rows.filter(r => {
+  // Unsplit slots apply every week; retain the odd/even snapshot contract.
+  return rows.flatMap(r => r.week === 'both' ? [{...r, week:'odd'}, {...r, week:'even'}] : [r]).filter(r => {
     const key = [r.week, r.dow, r.time, normalize(r.subject), normalize(r.kind), normalize(r.teacher), normalize(r.room)].join('|');
     if (seen.has(key)) return false;
     seen.add(key);
@@ -389,7 +390,7 @@ function selfTest() {
   const group = findSelectedGroup('<option value="O-26-IST-SII-B">О-26-ИСТ-СИИ-Б</option>', 'О-26-ИСТ-СИИ-Б');
   assert(group === 'O-26-IST-SII-B', 'поиск значения группы неверен');
   const singleEven = parseSchedule('<table class="contless"><tr><td class="daeweek">Вторник</td></tr><tr><td class="schtime">09:45 - 11:20</td><td class="schclass">Информатика <span class="schtype">Практические занятия</span></td><td class="schteacher">Иванов И. И.</td><td>А101</td></tr></table>', 'even');
-  assert(singleEven.length===1 && singleEven[0].week==='even', 'fallback текущей недели не работает');
+  assert(singleEven.length===2 && singleEven[0].week==='odd' && singleEven[1].week==='even', 'пара без разделения должна идти в обе недели');
   console.log(`SELF-TEST OK: ${parsed.length} rows; odd=${parsed.filter(x=>x.week==='odd').length}; even=${parsed.filter(x=>x.week==='even').length}`);
 }
 
