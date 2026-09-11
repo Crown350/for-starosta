@@ -21,3 +21,6 @@ backups/
 editor-keys*.txt
 *.tmp
 *.bak
+
+# Local JSON/JSONL exports, logs and private configuration
+/local-private/
