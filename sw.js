@@ -1,5 +1,5 @@
-const CACHE='starosta-v20';
-const SHELL=['./','./index.html','./app.js?v=guest-more-1','./cloud.js?v=guest-more-1','./local-copy.js','./dialogs.js','./config.js?v=proxy-1','./api-transport.js?v=proxy-1','./data/teachers.json','./manifest.webmanifest','./icon-192.png'];
+const CACHE='starosta-v21';
+const SHELL=['./','./index.html','./app.js?v=building-maps-1','./cloud.js?v=guest-more-1','./local-copy.js','./dialogs.js','./config.js?v=proxy-1','./api-transport.js?v=proxy-1','./data/teachers.json','./manifest.webmanifest','./icon-192.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('starosta-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{

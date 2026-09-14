@@ -5,7 +5,7 @@ const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const ctx=vm.createContext({esc:s=>String(s),subjName:id=>id,teachName:id=>id,S:{tpl:[{subjectId:'Языки',teacherId:'Ефремов',kind:'Лабораторные работы'},{subjectId:'Языки',teacherId:'Вдовиченко',kind:'Лекции'},{subjectId:'Языки',teacherId:'Ефремов',kind:'Лабораторные работы'}]}});
 vm.runInContext(source.slice(source.indexOf('let teacherDirectory='),source.indexOf('function viewDir()')),ctx);
 test('room rules are exact; sport is selected by subject',()=>{
- for(const [room,building] of [['51',1],['А213',3],['Б404',4],['231',2]])assert.equal(ctx.lessonLocation({subjectId:'Алгебра',room}),room+' · '+building+' корпус');
+ for(const [room,building] of [['51',1],['А213',3],['Б404',4],['231',2]]){const result=ctx.lessonLocation({subjectId:'Алгебра',room});assert.ok(result.startsWith(room+' · <a '));assert.ok(result.includes(building+' корпус ↗</a>'));assert.ok(result.includes('target="_blank" rel="noopener noreferrer"'));assert.ok(result.includes('https://yandex.ru/maps/-/'+{1:'CTt2u8jQ',2:'CTt2uLzr',3:'CTt2uTpr',4:'CTt2u-zk'}[building]));}
  for(const room of ['ауд.Д','Читальный зал','А51','1234',''])assert.equal(ctx.lessonLocation({subjectId:'Алгебра',room}),room);
  assert.match(ctx.lessonLocation({subjectId:'Физическая культура и спорт',room:'Б105'}),/target="_blank".*Дом спорта БГТУ/);
 });

@@ -704,7 +704,8 @@ function lessonLocation(lesson){
   if(/^Физическая культура/i.test(subjName(lesson.subjectId)))return '<a href="https://yandex.ru/maps/org/dom_sporta_bgtu/16992735690/" target="_blank" rel="noopener noreferrer">Дом спорта БГТУ ↗</a>';
   const room=String(lesson.room||'').trim();
   const building=/^\d{2}$/.test(room)?1:/^[АA]\d{3}$/i.test(room)?3:/^[БB]\d{3}$/i.test(room)?4:/^\d{3}$/.test(room)?2:null;
-  return esc(room)+(building?' · '+building+' корпус':'');
+  const maps={1:'CTt2u8jQ',2:'CTt2uLzr',3:'CTt2uTpr',4:'CTt2u-zk'};
+  return esc(room)+(building?' · <a href="https://yandex.ru/maps/-/'+maps[building]+'" target="_blank" rel="noopener noreferrer">'+building+' корпус ↗</a>':'');
 }
 
 function viewDir(){
