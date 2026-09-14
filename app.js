@@ -171,7 +171,7 @@ function viewPairs(){
       <div class="lesson" data-act="openatt" data-id="${l.id}">
         <span class="pairno">${l.pair}</span>
         <span class="t"><b>${esc(subjName(l.subjectId))}</b>
-          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${l.room?' · '+esc(l.room):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
+          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${lessonLocation(l)?' · '+lessonLocation(l):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
         <span class="chip ${n?'bad':'ok'}">${n} Н</span>
         ${u?`<span class="chip warn">${u} У</span>`:''}
       </div>
@@ -672,6 +672,39 @@ function viewBGTU(){
 }
 
 
+let teacherDirectory={};
+const teacherKey=name=>String(name||'').replace(/\s+/g,'').toLowerCase();
+async function loadTeachers(){
+  try{
+    const res=await fetch('./data/teachers.json');
+    if(!res.ok)return;
+    const data=await res.json();
+    teacherDirectory=Object.fromEntries(Object.entries(data).map(([name,info])=>[teacherKey(name),info]));
+    render();
+  }catch{} // The public directory is optional offline.
+}
+function teacherDetails(name){
+  const info=teacherDirectory[teacherKey(name)];
+  if(!info)return '';
+  return '<small>'+esc(info.full)+'</small><small><a href="'+esc(info.url)+'" target="_blank" rel="noopener noreferrer">Страница БГТУ ↗</a></small>';
+}
+function subjectTeachers(subjectId){
+  const teachers=new Map();
+  for(const row of S.tpl||[]){
+    if(row.subjectId!==subjectId||!row.teacherId)continue;
+    const name=teachName(row.teacherId);if(!name)continue;
+    if(!teachers.has(name))teachers.set(name,new Set());
+    if(row.kind)teachers.get(name).add(row.kind);
+  }
+  return [...teachers].map(([name,kinds])=>'<small>'+esc(name)+(kinds.size?' — '+esc([...kinds].join(', ')):'')+'</small>').join('');
+}
+function lessonLocation(lesson){
+  if(/^Физическая культура/i.test(subjName(lesson.subjectId)))return '<a href="https://yandex.ru/maps/org/dom_sporta_bgtu/16992735690/" target="_blank" rel="noopener noreferrer">Дом спорта БГТУ ↗</a>';
+  const room=String(lesson.room||'').trim();
+  const building=/^\d{2}$/.test(room)?1:/^[АA]\d{3}$/i.test(room)?3:/^[БB]\d{3}$/i.test(room)?4:/^\d{3}$/.test(room)?2:null;
+  return esc(room)+(building?' · '+building+' корпус':'');
+}
+
 function viewDir(){
   const isT = ctx.dir==='teachers';
   const items = isT ? S.teachers : S.subjects;
@@ -680,7 +713,7 @@ function viewDir(){
   items.forEach((it,i)=>{
     h += `<li class="card" data-id="${it.id}"><div class="top">
       <span class="num">${i+1}</span>
-      <span class="fio">${esc(isT?it.fio:it.name)}<small>${esc(isT?(it.dept||''):(it.control||''))}</small></span>
+      <span class="fio">${esc(isT?it.fio:it.name)}<small>${esc(isT?(it.dept||''):(it.control||''))}</small>${isT?teacherDetails(it.fio):subjectTeachers(it.id)}</span>
       <button class="iconbtn" data-act="editdir" data-id="${it.id}">✎</button>
       <button class="iconbtn" data-act="deldir" data-id="${it.id}">🗑</button>
     </div></li>`;
@@ -843,6 +876,7 @@ async function runOCR(){
 
 /* ============================ ДЕЙСТВИЯ ============================ */
 document.addEventListener('click', async e=>{
+  if(e.target.closest('a[href]'))return;
   const nb = e.target.closest('#nav button');
   if(nb){ tab=nb.dataset.tab; view=null; ctx={}; return render(); }
   const btn = e.target.closest('[data-act]');
@@ -1123,6 +1157,7 @@ document.addEventListener('focusout', ()=>setTimeout(measure,120));
 /* ============================ СТАРТ ============================ */
 async function startApp(){
   void loadCurriculum();
+  void loadTeachers();
   const raw = await store.get(KEY);
   if(raw){ try{ S = Object.assign(fresh(), JSON.parse(raw)); }catch(e){} }
   await window.cloudInit();
