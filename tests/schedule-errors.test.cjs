@@ -4,8 +4,8 @@ const fn=source.slice(source.indexOf('async function loadScheduleSnapshot(){'),s
 const snapshot={ok:true,lessons:[{subject:'Алгебра'}],fetchedAt:'2026-09-10T10:00:00Z',contentHash:'hash-1'};
 const response=data=>({ok:true,json:async()=>data});
 async function run(fetch,schedule={}){
- const c=vm.createContext({window:{STAROSTA_SUPABASE_URL:'https://example.supabase.co'},S:{schedule},render(){},save(){},toast(){throw Error('Must stay silent');},applyBGTUSchedule(data){c.applied=data;},AbortController,setTimeout,clearTimeout,fetch});
- vm.runInContext(fn,c);await c.loadScheduleSnapshot();return c;
+ const c=vm.createContext({window:{STAROSTA_SUPABASE_URL:'https://example.supabase.co'},S:{schedule},render(){},save(){},toast(){throw Error('Must stay silent');},applyBGTUSchedule(data){c.applied=data;},AbortController,AbortSignal,Headers,setTimeout,clearTimeout,fetch});
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'../api-transport.js'),'utf8'),c);vm.runInContext(fn,c);await c.loadScheduleSnapshot();return c;
 }
 test('automatic snapshot loading uses Edge',async()=>{const urls=[];const c=await run(async url=>{urls.push(url);return response(snapshot);});assert.deepEqual(urls,['https://example.supabase.co/functions/v1/fetch-schedule']);assert.equal(c.applied.contentHash,'hash-1');});
 test('fallback is silent when Edge fails',async()=>{const urls=[];const c=await run(async url=>{urls.push(url);if(url!=='./schedule.json')throw Error('network');return response(snapshot);});assert.equal(urls[1],'./schedule.json');assert.equal(c.S.schedule.lastError,'');assert.ok(c.applied);});

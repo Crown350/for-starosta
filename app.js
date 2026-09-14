@@ -578,10 +578,11 @@ function applyBGTUSchedule(data){
 async function loadScheduleSnapshot(){
   if(window.cloudScheduleBlocked?.())return;
   const targetState=S;
-  async function load(url){
-    const ac=new AbortController();const timer=setTimeout(()=>ac.abort(),20000);
+  async function load(url,viaSupabase=false){
+    const ac=new AbortController();const timer=viaSupabase?null:setTimeout(()=>ac.abort(),20000);
     try{
-      const res=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal});
+      const options={cache:'no-store',headers:{Accept:'application/json'},signal:ac.signal};
+      const res=await (viaSupabase?window.starostaSupabaseFetch(url,options):fetch(url,options));
       const data=await res.json();
       if(!res.ok||!data?.ok||!Array.isArray(data.lessons)||!data.lessons.length||!Number.isFinite(Date.parse(data.fetchedAt)))throw new Error('Invalid schedule');
       return data;
@@ -590,7 +591,7 @@ async function loadScheduleSnapshot(){
   let data;
   try{
     if(window.STAROSTA_SUPABASE_URL){
-      try{data=await load(window.STAROSTA_SUPABASE_URL.replace(/\/$/,'')+'/functions/v1/fetch-schedule');}
+      try{data=await load('/functions/v1/fetch-schedule',true);}
       catch{data=await load('./schedule.json');}
     }else data=await load('./schedule.json');
     if(S!==targetState||window.cloudScheduleBlocked?.())return;

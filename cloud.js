@@ -37,9 +37,9 @@
     const sessionToken=token;
     if(window.STAROSTA_SUPABASE_URL){
       const body=options.body?JSON.parse(options.body):{};
-      const response=await fetch(window.STAROSTA_SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/rpc/starosta_state',{
+      const response=await window.starostaSupabaseFetch('/rest/v1/rpc/starosta_state',{
         method:'POST',headers:{'Content-Type':'application/json',apikey:window.STAROSTA_SUPABASE_KEY},
-        body:JSON.stringify({access_key:token,operation:route==='/api/session'?'session':options.method==='PUT'?'write':'read',expected_revision:body.revision??null,payload:body.data??null}),signal:AbortSignal.timeout(20000)
+        body:JSON.stringify({access_key:token,operation:route==='/api/session'?'session':options.method==='PUT'?'write':'read',expected_revision:body.revision??null,payload:body.data??null})
       });
       const result=await response.json();if(sessionToken!==token)throw new Error('Сессия изменена');if(!response.ok){const error=new Error(result.message||'Ошибка облачного хранилища');error.status=response.status;throw error;}return result;
     }
