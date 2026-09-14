@@ -5,6 +5,7 @@
   const localCopy=new JournalLocalCopy(store,KEY);
   const privacyError=()=>status('Не удалось очистить копию устройства. Очисти данные сайта в браузере.');
   const safeActions=new Set(['back','dshift','today','openatt','attreport','daysum','openwork','workreport','openfund','fundreport','openstud','msgstud','risk','syncbgtu','gobgtu','openbgtu','godir','gotpl','csvatt','csvworks','backup','setweek']);
+  window.cloudHasSession=()=>ready && !!token;
   window.cloudCanEdit=()=>ready && !!token && !conflict;
   window.cloudScheduleBlocked=()=>!!token && conflict;
   const panel=document.createElement('section');panel.id='cloud-panel';

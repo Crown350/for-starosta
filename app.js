@@ -448,7 +448,7 @@ function viewMore(){
       <li class="card"><div class="lesson" data-act="gobgtu"><span class="t"><b>Расписание БГТУ</b>
         <span>${esc((S.schedule&&S.schedule.group)||'О-26-ИСТ-СИИ-Б')} · ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя</span></span><span>›</span></div></li>
     </ul>
-    <h2>Выгрузка</h2>
+    ${window.cloudHasSession?.()?`<h2>Выгрузка</h2>
     <div class="row wrap-it">
       <button class="btn ghost" data-act="csvatt" style="flex:1">Посещаемость в CSV</button>
       <button class="btn ghost" data-act="csvworks" style="flex:1">Сдачи в CSV</button>
@@ -463,6 +463,7 @@ function viewMore(){
       <div class="row"><input type="number" inputmode="numeric" data-act="limit" value="${S.limit}" placeholder="порог"></div>
       <p class="hint">Сколько прогулов по предмету, чтобы подсветить человека красным.</p>
     </div>
+    `:''}
       <p class="hint">Журнал хранится в облаке. Копия на устройстве сохраняется только с твоего согласия и удаляется при выходе.</p>
     <p class="hint">Версия ${APP_V}</p>
     <div style="height:20px"></div>`;
