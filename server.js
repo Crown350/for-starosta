@@ -311,6 +311,8 @@ function server() {
         const files = {
           '/': ['index.html','text/html; charset=utf-8'],
           '/index.html': ['index.html','text/html; charset=utf-8'],
+          '/styles.css': ['styles.css','text/css; charset=utf-8'],
+          '/api-transport.js': ['api-transport.js','application/javascript; charset=utf-8'],
           '/data/curriculum.json': ['data/curriculum.json','application/json; charset=utf-8'],
           '/schedule.json': ['schedule.json','application/json; charset=utf-8'],
           '/dialogs.js': ['dialogs.js','application/javascript; charset=utf-8'],
