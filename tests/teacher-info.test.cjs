@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
-const ctx=vm.createContext({esc:s=>String(s),subjName:id=>id,teachName:id=>id,S:{tpl:[{subjectId:'Языки',teacherId:'Ефремов',kind:'Лабораторные работы'},{subjectId:'Языки',teacherId:'Вдовиченко',kind:'Лекции'},{subjectId:'Языки',teacherId:'Ефремов',kind:'Лабораторные работы'}]}});
+const ctx=vm.createContext({esc:s=>String(s),subjName:id=>id,teachName:id=>id,S:{tpl:[{subjectId:'Языки',teacherId:'Тестов',kind:'Лабораторные работы'},{subjectId:'Языки',teacherId:'Примеров',kind:'Лекции'},{subjectId:'Языки',teacherId:'Тестов',kind:'Лабораторные работы'}]}});
 vm.runInContext(source.slice(source.indexOf('let teacherDirectory='),source.indexOf('function viewDir()')),ctx);
 test('room rules are exact; sport is selected by subject',()=>{
  for(const [room,building] of [['ауд.Д',3],['51',1],['А213',3],['Б404',4],['231',2]]){const result=ctx.lessonLocation({subjectId:'Алгебра',room});assert.ok(result.startsWith(room+' · <a '));assert.ok(result.includes(building+' корпус ↗</a>'));assert.ok(result.includes('target="_blank" rel="noopener noreferrer"'));assert.ok(result.includes('https://yandex.ru/maps/-/'+{1:'CTt2u8jQ',2:'CTt2uLzr',3:'CTt2uTpr',4:'CTt2u-zk'}[building]));}
@@ -11,11 +11,11 @@ test('room rules are exact; sport is selected by subject',()=>{
 });
 test('subject teachers preserve kind and deduplicate repeated weeks',()=>{
  const result=ctx.subjectTeachers('Языки');
- assert.equal(result,'<small>Ефремов — Лабораторные работы</small><small>Вдовиченко — Лекции</small>');
+ assert.equal(result,'<small>Тестов — Лабораторные работы</small><small>Примеров — Лекции</small>');
  assert.equal(ctx.teacherDetails('Вакансия . .'),'');
 });
 
 test('teacher initials normalize spaced, compact and full names without changing source',()=>{
- for(const name of [' Алейникова А. О. ','Алейникова А.О.','Алейникова А . О .','Алейникова Алина Олеговна'])assert.equal(ctx.formatTeacherName(name),'Алейникова А.О.');
- for(const [name,want] of [['Гарбузова Г. В.','Гарбузова Г.В.'],['Ефремов Д.А.','Ефремов Д.А.'],['Голоколенов А. В.','Голоколенов А.В.'],['Вакансия . .','Вакансия . .']])assert.equal(ctx.formatTeacherName(name),want);
+ for(const name of [' Тестова А. О. ','Тестова А.О.','Тестова А . О .','Тестова Анна Олеговна'])assert.equal(ctx.formatTeacherName(name),'Тестова А.О.');
+ for(const [name,want] of [['Примерова Г. В.','Примерова Г.В.'],['Тестов Д.А.','Тестов Д.А.'],['Образцов А. В.','Образцов А.В.'],['Вакансия . .','Вакансия . .']])assert.equal(ctx.formatTeacherName(name),want);
 });

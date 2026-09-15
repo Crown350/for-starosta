@@ -2,13 +2,14 @@ const {createHash}=require('node:crypto');
 const {request}=require('./http');
 const {parseSchedule,parseCurrentWeek,findSelectedGroup,attr}=require('./parser');
 const BASE='https://www.tu-bryansk.ru/education/schedule/';
-const GROUP='О-26-ИСТ-сии-Б';
 const canonical=value=>Array.isArray(value)?'['+value.map(canonical).join(',')+']':value&&typeof value==='object'?'{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}':JSON.stringify(value);
 const hash=value=>createHash('sha256').update(canonical(value)).digest('hex');
-const payload=data=>({ok:true,source:'БГТУ',group:GROUP,currentWeek:data.currentWeek,period:data.period,
+const payload=data=>({ok:true,source:'БГТУ',group:data.group,currentWeek:data.currentWeek,period:data.period,
   lessons:data.lessons.map(({week,dow,pair,time,subject,kind,teacher,room})=>({week,dow,pair,time,subject,kind,teacher,room}))});
 
-async function fetchSchedule(send=request){
+async function fetchSchedule(send=request,groupName=process.env.GROUP){
+  if(!groupName?.trim())throw new Error('Задайте GROUP в переменных окружения');
+  groupName=groupName.trim();
   const cookies=new Map();
   async function bgtu(url,form){
     const headers={'User-Agent':'Starosta-BGTU/10 (+https://www.tu-bryansk.ru/education/schedule/)',Accept:'text/html,application/xhtml+xml',Referer:BASE};
@@ -29,13 +30,13 @@ async function fetchSchedule(send=request){
   const period=selected&&attr(selected[1],'value');
   if(!period||!/^\d{4}-\d{4}_[12]_\d+$/.test(period))throw new Error('БГТУ: учебный период не определён');
   const groups=await bgtu(BASE+'schedule.ajax.php',{namedata:'group',faculty:'Факультет информационных технологий',level:'бакалавр',period,form:'очная'});
-  const group=findSelectedGroup(groups,GROUP)||findSelectedGroup(page,GROUP);
+  const group=findSelectedGroup(groups,groupName)||findSelectedGroup(page,groupName);
   if(!group)throw new Error('БГТУ: группа не найдена');
   const html=await bgtu(BASE+'schedule.ajax.php',{namedata:'schedule',group,period,form:'очная'});
   if(!/class=["'][^"']*contless/i.test(html)||!html.includes('schname'))throw new Error('БГТУ: изменилась разметка');
   const lessons=parseSchedule(html,currentWeek);
   if(lessons.length<10||lessons.length>200||lessons.some(r=>!['odd','even'].includes(r.week)||!Number.isInteger(r.dow)||r.dow<1||r.dow>6||!Number.isInteger(r.pair)||r.pair<1||!r.subject))throw new Error('БГТУ: снимок отклонён, требуется минимум 10 корректных занятий');
-  return payload({currentWeek,period,lessons});
+  return payload({group:groupName,currentWeek,period,lessons});
 }
 
 function output(cache,cached,changed=false,error=null){
@@ -56,7 +57,7 @@ async function sync({env=process.env,send=request,now=()=>new Date().toISOString
   const claim=await rpc('claim_yandex_schedule',{origin,trigger_id:triggerId});
   if(!claim.acquired)return output(claim.cache,true);
   try{
-    const snapshot=await fetchSchedule(send);
+    const snapshot=await fetchSchedule(send,env.GROUP);
     snapshot.fetchedAt=now();
     const comparedChanged=!claim.cache.json||hash(payload(claim.cache.json))!==hash(payload(snapshot));
     const saved=await rpc('finish_yandex_schedule',{lease:claim.cache.request_token,snapshot});

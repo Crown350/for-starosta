@@ -8,7 +8,7 @@ const PORT = Number(process.env.PORT || 8787);
 const BASE = 'https://www.tu-bryansk.ru/education/schedule/';
 const AJAX = new URL('schedule.ajax.php', BASE).toString();
 const DEFAULTS = {
-  group: 'О-26-ИСТ-сии-Б',
+  group: process.env.GROUP || '',
   faculty: 'Факультет информационных технологий',
   level: 'бакалавр',
   period: '2026-2027_1_1',
@@ -233,12 +233,12 @@ function postForm(data) {
 
 function mockSchedule() {
   const lessons = [
-    {week:'odd',dow:1,pair:1,time:'08:00 - 09:35',subject:'Основы российской государственности',kind:'Лекции',teacher:'Атаманова Н. В.',room:'ауд.Д'},
-    {week:'even',dow:1,pair:1,time:'08:00 - 09:35',subject:'Основы российской государственности',kind:'Лекции',teacher:'Атаманова Н. В.',room:'ауд.Д'},
-    {week:'odd',dow:1,pair:2,time:'09:45 - 11:20',subject:'Алгебра и геометрия',kind:'Лекции',teacher:'Кобзев В. М.',room:'Б404'},
-    {week:'even',dow:1,pair:2,time:'09:45 - 11:20',subject:'Алгебра и геометрия',kind:'Лекции',teacher:'Кобзев В. М.',room:'Б404'},
-    {week:'odd',dow:1,pair:3,time:'11:30 - 13:05',subject:'Математический анализ',kind:'Практические занятия',teacher:'Алейникова А. О.',room:'А213'},
-    {week:'even',dow:1,pair:3,time:'11:30 - 13:05',subject:'Математический анализ',kind:'Практические занятия',teacher:'Алейникова А. О.',room:'А213'}
+    {week:'odd',dow:1,pair:1,time:'08:00 - 09:35',subject:'Основы российской государственности',kind:'Лекции',teacher:'Условная Н. В.',room:'ауд.Д'},
+    {week:'even',dow:1,pair:1,time:'08:00 - 09:35',subject:'Основы российской государственности',kind:'Лекции',teacher:'Условная Н. В.',room:'ауд.Д'},
+    {week:'odd',dow:1,pair:2,time:'09:45 - 11:20',subject:'Алгебра и геометрия',kind:'Лекции',teacher:'Условный В. М.',room:'Б404'},
+    {week:'even',dow:1,pair:2,time:'09:45 - 11:20',subject:'Алгебра и геометрия',kind:'Лекции',teacher:'Условный В. М.',room:'Б404'},
+    {week:'odd',dow:1,pair:3,time:'11:30 - 13:05',subject:'Математический анализ',kind:'Практические занятия',teacher:'Тестова А. О.',room:'А213'},
+    {week:'even',dow:1,pair:3,time:'11:30 - 13:05',subject:'Математический анализ',kind:'Практические занятия',teacher:'Тестова А. О.',room:'А213'}
   ];
   return { ok:true, source:'БГТУ (MOCK)', group:DEFAULTS.group, currentWeek:'odd', lessons, fetchedAt:new Date().toISOString(), cached:false, mock:true };
 }
@@ -252,6 +252,7 @@ async function getSchedule(params) {
     period: params.period || DEFAULTS.period,
     form: params.form || DEFAULTS.form
   };
+  if(!cfg.group.trim())throw new Error('Задайте GROUP в переменных окружения');
   const cacheKey = JSON.stringify(cfg);
   const cached = scheduleCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return { ...cached.data, cached: true };
@@ -354,29 +355,29 @@ function selfTest() {
     <tr>
       <td class="schtime" rowspan="2">08:00 - 09:35</td>
       <td class="itmles schclass">Основы российской государственности <span class="schtype">Лекции</span></td>
-      <td class="itmles schteacher">Атаманова Н. В.</td><td class="itmles">ауд.Д</td>
+      <td class="itmles schteacher">Условная Н. В.</td><td class="itmles">ауд.Д</td>
     </tr>
     <tr>
       <td class="itmles schclass">Основы российской государственности <span class="schtype">Лекции</span></td>
-      <td class="itmles schteacher">Атаманова Н. В.</td><td class="itmles">ауд.Д</td>
+      <td class="itmles schteacher">Условная Н. В.</td><td class="itmles">ауд.Д</td>
     </tr>
     <tr>
       <td class="schtime" rowspan="2">09:45 - 11:20</td>
       <td class="itmles schclass">Алгебра и геометрия <span class="schtype">Лекции</span></td>
-      <td class="itmles schteacher">Кобзев В. М.</td><td class="itmles">Б404</td>
+      <td class="itmles schteacher">Условный В. М.</td><td class="itmles">Б404</td>
     </tr>
     <tr>
       <td class="itmles schclass">Алгебра и геометрия <span class="schtype">Лекции</span></td>
-      <td class="itmles schteacher">Кобзев В. М.</td><td class="itmles">Б404</td>
+      <td class="itmles schteacher">Условный В. М.</td><td class="itmles">Б404</td>
     </tr>
     <tr>
       <td class="schtime" rowspan="2">11:30 - 13:05</td>
       <td class="itmles schclass">Математический анализ <span class="schtype">Практические занятия</span></td>
-      <td class="itmles schteacher">Алейникова А. О.</td><td class="itmles">А213</td>
+      <td class="itmles schteacher">Тестова А. О.</td><td class="itmles">А213</td>
     </tr>
     <tr>
       <td class="itmles schclass">Математический анализ <span class="schtype">Практические занятия</span></td>
-      <td class="itmles schteacher">Алейникова А. О.</td><td class="itmles">А213</td>
+      <td class="itmles schteacher">Тестова А. О.</td><td class="itmles">А213</td>
     </tr>
   </table>`;
   const parsed = parseSchedule(fixture);
@@ -387,8 +388,8 @@ function selfTest() {
   assert(parsed[0].subject === 'Основы российской государственности', 'предмет не распознан');
   assert(parsed[2].pair === 2 && parsed[4].pair === 3, 'номер пары определён неверно');
 
-  const group = findSelectedGroup('<option value="O-26-IST-SII-B">О-26-ИСТ-СИИ-Б</option>', 'О-26-ИСТ-СИИ-Б');
-  assert(group === 'O-26-IST-SII-B', 'поиск значения группы неверен');
+  const group = findSelectedGroup('<option value="TEST-01">ТЕСТ-01</option>', 'ТЕСТ-01');
+  assert(group === 'TEST-01', 'поиск значения группы неверен');
   const singleEven = parseSchedule('<table class="contless"><tr><td class="daeweek">Вторник</td></tr><tr><td class="schtime">09:45 - 11:20</td><td class="schclass">Информатика <span class="schtype">Практические занятия</span></td><td class="schteacher">Иванов И. И.</td><td>А101</td></tr></table>', 'even');
   assert(singleEven.length===2 && singleEven[0].week==='odd' && singleEven[1].week==='even', 'пара без разделения должна идти в обе недели');
   console.log(`SELF-TEST OK: ${parsed.length} rows; odd=${parsed.filter(x=>x.week==='odd').length}; even=${parsed.filter(x=>x.week==='even').length}`);

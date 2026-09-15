@@ -18,3 +18,5 @@ test('view marks only snapshots older than six hours and keeps refresh control',
  assert.match(c.viewBGTU(),/Снимок старше 6 часов/);assert.match(c.viewBGTU(),/Обновлено:/);assert.match(c.viewBGTU(),/syncbgtu/);
  c.S.schedule.fetchedAt=new Date().toISOString();assert.doesNotMatch(c.viewBGTU(),/Снимок старше 6 часов/);
 });
+
+test('group comes from snapshot even when its content hash is unchanged',async()=>{const c=await run(async()=>response({...snapshot,group:'ТЕСТ-02'}),{contentHash:'hash-1'});assert.equal(c.S.group,'ТЕСТ-02');assert.equal(c.S.schedule.group,'ТЕСТ-02');assert.equal(c.applied,undefined);});

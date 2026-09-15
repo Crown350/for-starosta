@@ -26,7 +26,7 @@ const DOW = ["воскресенье","понедельник","вторник",
 function fresh(){
   return {
     v:1,
-    group:'О-26-ИСТ-СИИ-Б',
+    group:'',
     students: NAMES.map((n,i)=>({id:'s'+i, fio:n, phone:'', tg:'', note:''})),
     teachers: [],
     subjects: SUBJ.map((n,i)=>({id:'p'+i, name:n, control:'', teacherId:''})),
@@ -42,7 +42,7 @@ function fresh(){
       source:'БГТУ', year:'2026-2027', semester:1, form:'Очное',
       faculty:'Факультет информационных технологий', education:'бакалавр',
       code:'09.03.02', profile:'Системы искусственного интеллекта и обработка больших данных',
-      group:'О-26-ИСТ-СИИ-Б', week:'odd', importedAt:''
+      group:'', week:'odd', importedAt:''
     },
     limit: 3              // порог пропусков
   };
@@ -429,7 +429,7 @@ async function loadCurriculum(){
 }
 function viewSemester(){
   const n=control=>curriculum.filter(r=>r.control===control).length;
-  let h=head('Семестр','1 курс · 1 семестр · О-26-ИСТ-СИИ-Б')+'</header>';
+  let h=head('Семестр','1 курс · '+S.schedule.semester+' семестр · '+S.group)+'</header>';
   h+='<div class="card semester-summary"><span>'+plural(n('Экзамен'),'экзамен','экзамена','экзаменов')+'</span><span>'+plural(n('Зачёт')+n('ЗачётСОценкой'),'зачёт','зачёта','зачётов')+'</span><span>'+curriculum.filter(r=>r.extra).length+' курсовых</span><span>'+curriculum.reduce((s,r)=>s+r.ze,0)+' з.е.</span></div><p class="hint">По дисциплинам, подтверждённым расписанием. Часы: лекции / лабораторные / практические.</p><ul>';
   for(const r of curriculum)h+='<li class="card"><div class="grp">'+esc(r.code)+' · '+r.ze+' з.е.</div><div class="fio"><b>'+esc(r.name)+'</b></div><div class="chips"><span class="chip '+(r.control==='Экзамен'?'semester-exam':r.control==='ЗачётСОценкой'?'warn':'ok')+'">'+(r.control==='ЗачётСОценкой'?'Зачёт с оценкой':esc(r.control))+'</span>'+(r.extra?'<span class="chip warn">'+esc(r.extra)+'</span>':'')+'</div><p class="hint">Лек: '+r.lek+' · Лаб: '+r.lab+' · Пр: '+r.pr+' ч.<br>Кафедра '+esc(r.kafedra)+'</p></li>';
   return h+'</ul>';
@@ -446,7 +446,7 @@ function viewMore(){
       <li class="card"><div class="lesson" data-act="gotpl"><span class="t"><b>Шаблон недели</b>
         <span>${S.tpl.length} пар в шаблоне</span></span><span>›</span></div></li>
       <li class="card"><div class="lesson" data-act="gobgtu"><span class="t"><b>Расписание БГТУ</b>
-        <span>${esc((S.schedule&&S.schedule.group)||'О-26-ИСТ-СИИ-Б')} · ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя</span></span><span>›</span></div></li>
+        <span>${esc((S.schedule&&S.schedule.group)||S.group||'Группа')} · ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя</span></span><span>›</span></div></li>
     </ul>
     ${window.cloudHasSession?.()?`<h2>Выгрузка</h2>
     <div class="row wrap-it">
@@ -510,6 +510,8 @@ function ensureBGTULessonsForDate(iso){
 function applyBGTUSchedule(data){
   const rows=Array.isArray(data?.lessons)?data.lessons:[];
   if(!rows.length) throw new Error('БГТУ вернуло пустое расписание');
+
+  if(typeof data.group==='string'&&data.group.trim())S.group=S.schedule.group=data.group.trim();
 
   // Удаляем только ранее импортированные БГТУ-шаблоны. Ручные шаблоны пользователя не трогаем.
   S.tpl=(S.tpl||[]).filter(t=>t.source!=='bgtu');
@@ -598,6 +600,7 @@ async function loadScheduleSnapshot(){
     if(S!==targetState||window.cloudScheduleBlocked?.())return;
     if(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))return;
     const same=data.contentHash?data.contentHash===S.schedule?.contentHash:data.fetchedAt===S.schedule?.fetchedAt;
+    if(typeof data.group==='string'&&data.group.trim())S.group=S.schedule.group=data.group.trim();
     if(!same)applyBGTUSchedule(data);
     S.schedule.fetchedAt=data.fetchedAt;
     S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
@@ -642,7 +645,7 @@ function viewBGTU(){
   const hasData=odd||even;
     let h=head('Расписание БГТУ','официальное расписание',1)+`</header>`;
   h+=`<div class="card">
-    <div class="fio"><b>${esc(m.group||'О-26-ИСТ-СИИ-Б')}</b></div>
+    <div class="fio"><b>${esc(m.group||S.group||'Группа')}</b></div>
     <p class="bgtu-source">${esc(m.profile||'Системы искусственного интеллекта и обработка больших данных')} · ${esc(m.code||'09.03.02')} · ${esc(m.form||'Очное')}</p>
     <div class="bgtu-meta">
       <span class="chip">${esc(m.year||'2026-2027')}</span>
@@ -659,7 +662,7 @@ function viewBGTU(){
     ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
     ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}
   </div>`;
-  h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||'О-26-ИСТ-СИИ-Б')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
+  h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||S.group||'Группа')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
   if(hasData){
     const rows=(m.week==='even'?bgtuTpls('even'):bgtuTpls('odd')).sort((a,b)=>a.dow-b.dow || a.pair-b.pair);
     h+=`<h2>${bgtuWeekLabel(m.week)} неделя · превью</h2><ul>`;

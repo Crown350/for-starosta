@@ -11,7 +11,7 @@ language plpgsql security definer set search_path='' as $$
 declare item starosta_private.schedule_cache%rowtype; payload jsonb; stamp timestamptz; hash text; changed boolean;
 begin
   if snapshot->>'ok' is distinct from 'true' or coalesce(snapshot->>'mock','false')<>'false'
-    or lower(snapshot->>'group') is distinct from 'о-26-ист-сии-б'
+    or coalesce(btrim(snapshot->>'group'),'')=''
     or jsonb_typeof(snapshot->'lessons') is distinct from 'array' then
     raise exception 'Invalid snapshot';
   end if;

@@ -38,7 +38,7 @@ begin
   if failure is not null then
     update starosta_private.schedule_cache set last_error=left(failure,500) where id=1 returning * into item;
   else
-    if snapshot is null or snapshot->>'group' is distinct from 'О-26-ИСТ-сии-Б'
+    if snapshot is null or coalesce(btrim(snapshot->>'group'),'')=''
       or jsonb_typeof(snapshot->'lessons') is distinct from 'array'
       or jsonb_array_length(snapshot->'lessons')<1 then
       raise exception 'Invalid schedule snapshot';
