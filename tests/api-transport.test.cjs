@@ -11,9 +11,16 @@ test('network failure retries identical revision/body directly once',async()=>{
  await call('/rest/v1/rpc/starosta_state',{method:'POST',headers:{Authorization:'Bearer user'},body:'{"expected_revision":12}'});assert.equal(n,2);
 });
 test('Supabase auth, conflicts and rate limits never trigger fallback',async()=>{
- for(const code of [401,403,409,429]){let n=0;const call=setup(async()=>{n++;return response(code);});assert.equal((await call('/rest/v1/rpc/starosta_state')).status,code);assert.equal(n,1);}
+ for(const code of [400,401,403,409,429,500,502,503,504]){let n=0;const call=setup(async()=>{n++;return response(code);});assert.equal((await call('/rest/v1/rpc/starosta_state')).status,code);assert.equal(n,1);}
 });
-test('Yandex outage falls back, while cancelled requests stay cancelled',async()=>{
- for(const status of [403,502,504]){let n=0;const call=setup(async()=>++n===1?response(status,false):response(200));assert.equal((await call('/functions/v1/fetch-schedule')).status,200);assert.equal(n,2);}
- let n=0;const call=setup(async()=>{n++;throw new Error('aborted')});await assert.rejects(call('/functions/v1/fetch-schedule',{signal:AbortSignal.abort()}));assert.equal(n,1);
+test('all HTTP responses are preserved, including unmarked gateway errors',async()=>{
+ for(const status of [403,502,504]){let n=0;const call=setup(async()=>{n++;return response(status,false)});assert.equal((await call('/functions/v1/fetch-schedule')).status,status);assert.equal(n,1);}
+});
+test('both routes unavailable produce a useful error; cancellation does not retry',async()=>{
+ let n=0;const call=setup(async()=>{n++;throw new TypeError('Load failed')});await assert.rejects(call('/functions/v1/fetch-schedule'),/Попробуйте VPN/);assert.equal(n,2);
+ n=0;await assert.rejects(call('/functions/v1/fetch-schedule',{signal:AbortSignal.abort()}));assert.equal(n,1);
+});
+test('timeout retries directly, next request starts at Yandex again',async()=>{
+ const urls=[];const call=setup(async url=>{urls.push(url);if(url.includes('yandex'))throw new DOMException('timed out','TimeoutError');return response(200);});
+ await call('/functions/v1/fetch-schedule');await call('/functions/v1/fetch-schedule');assert.equal(urls.length,4);assert.ok(urls[0].includes('yandex')&&urls[2].includes('yandex'));
 });

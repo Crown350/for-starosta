@@ -8,18 +8,19 @@
   async function attempt(root,proxy){
    const headers=new Headers(options.headers||{});
    if(proxy&&headers.has('Authorization')){headers.set('X-Supabase-Authorization',headers.get('Authorization'));headers.delete('Authorization');}
-   const timeout=AbortSignal.timeout(22000);
+   const timeout=AbortSignal.timeout(6000);
    const signal=options.signal?AbortSignal.any([options.signal,timeout]):timeout;
    const url=proxy?root+'?path='+encodeURIComponent(path):root+path;
    return fetch(url,{...options,headers,signal,cache:'no-store'});
   }
-  let response;
-  try{response=await attempt(base,throughProxy);}
-  catch(error){if(!throughProxy||options.signal?.aborted)throw error;return attempt(fallback,false);}
-  // Supabase auth/conflict/rate-limit responses are authoritative; never bypass them.
-  if(throughProxy&&(response.status>=500||(!response.ok&&!response.headers.get('x-starosta-proxy')))){
-   return attempt(fallback,false);
+  try{return await attempt(base,throughProxy);}
+  catch(error){
+   if(options.signal?.aborted)throw error;
+   if(throughProxy){
+    try{return await attempt(fallback,false);}
+    catch(fallbackError){if(options.signal?.aborted)throw fallbackError;}
+   }
+   throw new Error('Нет соединения с журналом. Попробуйте VPN и повторите запрос.');
   }
-  return response;
  };
 })();
