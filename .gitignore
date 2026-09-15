@@ -24,4 +24,4 @@ editor-keys*.txt
 
 # Local JSON/JSONL exports, logs and private configuration
 /local-private/
-
+/.superpowers/
