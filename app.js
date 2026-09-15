@@ -683,14 +683,35 @@ function formatTeacherName(value){
   return parts?.length?match[1]+' '+parts.map(part=>part[0].toUpperCase()+'.').join(''):name;
 }
 const teacherKey=name=>String(name||'').replace(/\s+/g,'').toLowerCase();
-async function loadTeachers(){
-  try{
-    const res=await fetch('./data/teachers.json');
-    if(!res.ok)return;
-    const data=await res.json();
-    teacherDirectory=Object.fromEntries(Object.entries(data).map(([name,info])=>[teacherKey(name),info]));
-    render();
-  }catch{} // The public directory is optional offline.
+let teachersLoadPromise;
+function loadTeachers(){
+  if(teachersLoadPromise)return teachersLoadPromise;
+  teachersLoadPromise=(async()=>{
+    const university=window.STAROSTA_UNIVERSITY||'bgtu';
+    const cacheKey='starosta.public-teachers.v1:'+university;
+    const valid=rows=>Array.isArray(rows)&&rows.every(row=>row&&['short_name','full_name','url'].every(key=>typeof row[key]==='string'));
+    const apply=rows=>{
+      teacherDirectory=Object.fromEntries(rows.map(row=>[teacherKey(row.short_name),{full:row.full_name,url:row.url}]));
+      render();
+    };
+    try{
+      const cached=JSON.parse(localStorage.getItem(cacheKey));
+      if(cached&&valid(cached.rows)){
+        apply(cached.rows);
+        if(Date.now()-cached.at>=0&&Date.now()-cached.at<24*60*60*1000)return;
+      }
+    }catch{} // Storage can be unavailable; continue with the network.
+    try{
+      const path='/rest/v1/teachers?select=short_name,full_name,url&university=eq.'+encodeURIComponent(university);
+      const res=await window.starostaSupabaseFetch(path,{headers:{apikey:window.STAROSTA_SUPABASE_KEY}});
+      if(!res.ok)return;
+      const rows=await res.json();
+      if(!valid(rows))return;
+      apply(rows);
+      try{localStorage.setItem(cacheKey,JSON.stringify({at:Date.now(),rows}));}catch{}
+    }catch{} // Keep the last public directory when offline.
+  })();
+  return teachersLoadPromise;
 }
 function teacherDetails(name){
   const info=teacherDirectory[teacherKey(name)];

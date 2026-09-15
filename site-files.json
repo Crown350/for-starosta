@@ -19,6 +19,5 @@
   "vendor/ocr/rus.traineddata.gz",
   "vendor/ocr/LICENSE-core.txt",
   "vendor/ocr/LICENSE-tesseract.txt",
-  "data/teachers.json",
   "api-transport.js"
 ]
