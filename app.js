@@ -171,7 +171,7 @@ function viewPairs(){
       <div class="lesson" data-act="openatt" data-id="${l.id}">
         <span class="pairno">${l.pair}</span>
         <span class="t"><b>${esc(subjName(l.subjectId))}</b>
-          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${lessonLocation(l)?' · '+lessonLocation(l):''}${l.teacherId?' · '+esc(initials(teachName(l.teacherId))):''}</span></span>
+          <span>${l.time?esc(l.time)+' · ':''}${esc(l.kind||'')}${lessonLocation(l)?' · '+lessonLocation(l):''}${l.teacherId?' · '+esc(formatTeacherName(teachName(l.teacherId))):''}</span></span>
         <span class="chip ${n?'bad':'ok'}">${n} Н</span>
         ${u?`<span class="chip warn">${u} У</span>`:''}
       </div>
@@ -664,7 +664,7 @@ function viewBGTU(){
     const rows=(m.week==='even'?bgtuTpls('even'):bgtuTpls('odd')).sort((a,b)=>a.dow-b.dow || a.pair-b.pair);
     h+=`<h2>${bgtuWeekLabel(m.week)} неделя · превью</h2><ul>`;
     rows.forEach(r=>{
-      h+=`<li class="card"><div class="top"><span class="pairno">${r.pair||'—'}</span><span class="fio"><b>${esc(DOW[r.dow]||'')}</b><small>${esc(r.time||'')}${r.subjectId?` · ${esc(subjName(r.subjectId))}`:''}${r.teacherId?` · ${esc(initials(teachName(r.teacherId)))}`:''}${r.room?' · '+esc(r.room):''}</small></span></div></li>`;
+      h+=`<li class="card"><div class="top"><span class="pairno">${r.pair||'—'}</span><span class="fio"><b>${esc(DOW[r.dow]||'')}</b><small>${esc(r.time||'')}${r.subjectId?` · ${esc(subjName(r.subjectId))}`:''}${r.teacherId?` · ${esc(formatTeacherName(teachName(r.teacherId)))}`:''}${r.room?' · '+esc(r.room):''}</small></span></div></li>`;
     });
 
     h+=`</ul>`;
@@ -675,6 +675,13 @@ function viewBGTU(){
 
 
 let teacherDirectory={};
+function formatTeacherName(value){
+  const name=String(value||'').trim().replace(/\s+/g,' ');
+  const match=name.match(/^(\S+)\s+(.+)$/);
+  if(!match)return name;
+  const parts=match[2].match(/[А-ЯЁA-Z][а-яёa-z]*/giu);
+  return parts?.length?match[1]+' '+parts.map(part=>part[0].toUpperCase()+'.').join(''):name;
+}
 const teacherKey=name=>String(name||'').replace(/\s+/g,'').toLowerCase();
 async function loadTeachers(){
   try{
@@ -698,7 +705,7 @@ function subjectTeachers(subjectId){
     if(!teachers.has(name))teachers.set(name,new Set());
     if(row.kind)teachers.get(name).add(row.kind);
   }
-  return [...teachers].map(([name,kinds])=>'<small>'+esc(name)+(kinds.size?' — '+esc([...kinds].join(', ')):'')+'</small>').join('');
+  return [...teachers].map(([name,kinds])=>'<small>'+esc(formatTeacherName(name))+(kinds.size?' — '+esc([...kinds].join(', ')):'')+'</small>').join('');
 }
 function lessonLocation(lesson){
   if(/^Физическая культура/i.test(subjName(lesson.subjectId)))return '<a href="https://yandex.ru/maps/org/dom_sporta_bgtu/16992735690/" target="_blank" rel="noopener noreferrer">Дом спорта БГТУ ↗</a>';
@@ -716,7 +723,7 @@ function viewDir(){
   items.forEach((it,i)=>{
     h += `<li class="card" data-id="${it.id}"><div class="top">
       <span class="num">${i+1}</span>
-      <span class="fio">${esc(isT?it.fio:it.name)}<small>${esc(isT?(it.dept||''):(it.control||''))}</small>${isT?teacherDetails(it.fio):subjectTeachers(it.id)}</span>
+      <span class="fio">${esc(isT?formatTeacherName(it.fio):it.name)}<small>${esc(isT?(it.dept||''):(it.control||''))}</small>${isT?teacherDetails(it.fio):subjectTeachers(it.id)}</span>
       <button class="iconbtn" data-act="editdir" data-id="${it.id}">✎</button>
       <button class="iconbtn" data-act="deldir" data-id="${it.id}">🗑</button>
     </div></li>`;

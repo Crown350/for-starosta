@@ -14,3 +14,8 @@ test('subject teachers preserve kind and deduplicate repeated weeks',()=>{
  assert.equal(result,'<small>Ефремов — Лабораторные работы</small><small>Вдовиченко — Лекции</small>');
  assert.equal(ctx.teacherDetails('Вакансия . .'),'');
 });
+
+test('teacher initials normalize spaced, compact and full names without changing source',()=>{
+ for(const name of [' Алейникова А. О. ','Алейникова А.О.','Алейникова А . О .','Алейникова Алина Олеговна'])assert.equal(ctx.formatTeacherName(name),'Алейникова А.О.');
+ for(const [name,want] of [['Гарбузова Г. В.','Гарбузова Г.В.'],['Ефремов Д.А.','Ефремов Д.А.'],['Голоколенов А. В.','Голоколенов А.В.'],['Вакансия . .','Вакансия . .']])assert.equal(ctx.formatTeacherName(name),want);
+});
