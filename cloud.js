@@ -1,7 +1,7 @@
 /* Shared journal. Keys live only in this tab's memory and are verified by the server. */
 (()=>{
   let token='', revision=0, ready=false, dirty=false, writing=false, conflict=false, timer;
-  let localBackup=null, usePublicSchedule=true;
+  let localBackup=null, usePublicSchedule=true, sessionEpoch=0, refreshPending=null, editVersion=0;
   const localCopy=new JournalLocalCopy(store,KEY);
   const privacyError=()=>status('Не удалось очистить копию устройства. Очисти данные сайта в браузере.');
   const safeActions=new Set(['back','dshift','today','openatt','attreport','daysum','openwork','workreport','openfund','fundreport','openstud','msgstud','risk','syncbgtu','gobgtu','gosemester','openbgtu','godir','gotpl','csvatt','csvworks','backup','setweek','cloudlogin']);
@@ -44,18 +44,18 @@
     if(el && !safeActions.has(el.dataset.act) && !window.cloudCanEdit()) {e.preventDefault();e.stopImmediatePropagation();toast('Редактирование доступно после входа по ключу');}
   },true);
   async function api(route,options={}){
-    const sessionToken=token;
+    const sessionToken=token, requestEpoch=sessionEpoch;
     if(window.STAROSTA_SUPABASE_URL){
       const body=options.body?JSON.parse(options.body):{};
       const response=await window.starostaSupabaseFetch('/rest/v1/rpc/starosta_state',{
         method:'POST',headers:{'Content-Type':'application/json',apikey:window.STAROSTA_SUPABASE_KEY},
         body:JSON.stringify({access_key:token,operation:route==='/api/session'?'session':options.method==='PUT'?'write':'read',expected_revision:body.revision??null,payload:body.data??null})
       });
-      const result=await response.json();if(sessionToken!==token)throw new Error('Сессия изменена');if(!response.ok){const error=new Error(result.message||'Ошибка облачного хранилища');error.status=response.status;throw error;}return result;
+      const result=await response.json();if(sessionToken!==token||requestEpoch!==sessionEpoch)throw new Error('Сессия изменена');if(!response.ok){const error=new Error(result.message||'Ошибка облачного хранилища');error.status=response.status;throw error;}return result;
     }
     const response=await fetch((window.STAROSTA_API||'')+route,{...options,cache:'no-store',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...options.headers},signal:AbortSignal.timeout(20000)});
     let data;try{data=await response.json();}catch{throw new Error('Сервер не подключён. Настрой адрес в config.js.');}
-    if(sessionToken!==token)throw new Error('Сессия изменена');
+    if(sessionToken!==token||requestEpoch!==sessionEpoch)throw new Error('Сессия изменена');
     if(!response.ok){const error=new Error(data.error||'Ошибка сервера');error.status=response.status;throw error;}return data;
   }
   async function pull(){
@@ -75,25 +75,50 @@
   }
   window.cloudSave=()=>{
     if(!window.cloudCanEdit())return;
-    dirty=true;localCopy.save(JSON.stringify(S)).catch(privacyError);
+    editVersion++;dirty=true;localCopy.save(JSON.stringify(S)).catch(privacyError);
     clearTimeout(timer);timer=setTimeout(async()=>{if(writing){timer=setTimeout(window.cloudSave,300);return;}await push();},350);
   };
   window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));offline.checked=await localCopy.init();S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');loadScheduleSnapshot();};
   document.getElementById('cloud-login').onsubmit=async e=>{
-    e.preventDefault();
+    e.preventDefault();sessionEpoch++;
     const keyInput=document.getElementById('cloud-key');
     token=keyInput.value.trim();keyInput.value='';status('Проверяю ключ…');
     const err=document.getElementById('cloud-error');
-    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;err.hidden=true;dlg.close('ok');await pull();}
+    dlg.setAttribute('aria-busy','true');
+    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;dlg.close('ok');await pull();}
     catch(error){token='';ready=false;permissions();err.textContent=error.message;err.hidden=false;keyInput.focus();}
+    finally{dlg.removeAttribute('aria-busy');}
   };
   document.getElementById('cloud-pull').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Заменить несохранённые изменения облачной версией? Сначала можно скачать их.'))return;try{await pull();}catch(e){status(e.message);}};
   document.getElementById('cloud-push').onclick=()=>push();
   document.getElementById('cloud-draft').onclick=()=>download('starosta-draft-'+todayISO()+'.json',JSON.stringify(S),'application/json');
   document.getElementById('cloud-import').onclick=async()=>{if(!window.cloudCanEdit())return;if(!await askConfirm('Заменить общий журнал данными, сохранёнными на этом устройстве до входа?'))return;S=JSON.parse(JSON.stringify(localBackup));save();render();};
-  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;usePublicSchedule=true;clearTimeout(timer);S=fresh();localBackup=null;view=null;ctx={};offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
+  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;usePublicSchedule=true;sessionEpoch++;refreshPending=null;clearTimeout(timer);S=fresh();localBackup=null;view=null;ctx={};offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
   window.addEventListener('beforeunload',e=>{if(dirty||writing){e.preventDefault();e.returnValue='';}});
-  setInterval(async()=>{if(!ready||dirty||writing||conflict||window.modalPending||document.hidden||document.activeElement?.matches('input,textarea,select'))return;const requestedRevision=revision;try{const data=await api('/api/state');if(!ready||dirty||writing||conflict||window.modalPending||revision!==requestedRevision)return;if(data.revision!==revision){revision=data.revision;S=Object.assign(fresh(),data.data||{});render();status('Получены изменения с другого устройства');}}catch(e){status('Облако недоступно · '+e.message);}},15000);
+  // S is the session-only cache. Never clear it while revalidating.
+  async function refreshJournal(){
+    if(!ready||!token||dirty||writing||conflict||window.modalPending||document.hidden||document.activeElement?.matches('input,textarea,select'))return;
+    if(refreshPending)return refreshPending;
+    const epoch=sessionEpoch, requestedRevision=revision, edits=editVersion;
+    const pending=(async()=>{
+      try{
+        const data=await api('/api/state');
+        if(epoch!==sessionEpoch||!ready||dirty||writing||conflict||window.modalPending||document.activeElement?.matches('input,textarea,select')||revision!==requestedRevision||edits!==editVersion)return;
+        if(data.revision!==revision){
+          revision=data.revision;usePublicSchedule=data.usePublicSchedule!==false;
+          S=Object.assign(fresh(),data.data||{});render();
+        }
+        status('Данные актуальны');
+      }catch{
+        if(epoch===sessionEpoch&&ready&&!dirty&&!writing&&!conflict)status('Не удалось обновить · показаны последние загруженные данные');
+      }
+    })();
+    refreshPending=pending;
+    try{await pending;}finally{if(refreshPending===pending)refreshPending=null;}
+  }
+  setInterval(refreshJournal,15000);
+  document.addEventListener('click',e=>{if(e.target.closest('#nav button[data-tab]'))void refreshJournal();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshJournal();});
   permissions();
   startApp().catch(error=>status('Не удалось запустить приложение: '+error.message));
 })();
