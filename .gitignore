@@ -25,3 +25,9 @@ editor-keys*.txt
 # Local JSON/JSONL exports, logs and private configuration
 /local-private/
 /.superpowers/
+TODO.md
+
+# Local docker test setup
+Dockerfile
+.dockerignore
+docker-compose.yml
