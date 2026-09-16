@@ -1,13 +1,13 @@
 /* Shared journal. Keys live only in this tab's memory and are verified by the server. */
 (()=>{
   let token='', revision=0, ready=false, dirty=false, writing=false, conflict=false, timer;
-  let localBackup=null;
+  let localBackup=null, usePublicSchedule=true;
   const localCopy=new JournalLocalCopy(store,KEY);
   const privacyError=()=>status('Не удалось очистить копию устройства. Очисти данные сайта в браузере.');
   const safeActions=new Set(['back','dshift','today','openatt','attreport','daysum','openwork','workreport','openfund','fundreport','openstud','msgstud','risk','syncbgtu','gobgtu','openbgtu','godir','gotpl','csvatt','csvworks','backup','setweek']);
   window.cloudHasSession=()=>ready && !!token;
   window.cloudCanEdit=()=>ready && !!token && !conflict;
-  window.cloudScheduleBlocked=()=>!!token && conflict;
+  window.cloudScheduleBlocked=()=>!!token && (conflict||!usePublicSchedule);
   const panel=document.createElement('section');panel.id='cloud-panel';
   panel.innerHTML='<div><b>Общий журнал</b><p id="cloud-status" role="status" aria-live="polite">Просмотр · войди по ключу для доступа к журналу</p></div><form id="cloud-login"><input id="cloud-key" type="password" autocomplete="off" placeholder="Ключ доступа" aria-label="Ключ доступа" required><button>Войти</button></form><details id="cloud-tools" hidden><summary>Управление журналом</summary><label><input id="cloud-offline" type="checkbox"> Сохранять офлайн-копию на устройстве до выхода</label><div class="cloud-buttons"><button id="cloud-pull">Загрузить из облака</button><button id="cloud-push">Повторить сохранение</button><button id="cloud-import">Перенести данные с этого устройства</button><button id="cloud-draft">Скачать несохранённое</button><button id="cloud-logout">Выйти</button></div></details>';
   document.body.insertBefore(panel,document.getElementById('app'));
@@ -51,6 +51,7 @@
   }
   async function pull(){
     const data=await api('/api/state');revision=data.revision;
+    usePublicSchedule=data.usePublicSchedule!==false;
     S=data.data?Object.assign(fresh(),data.data):fresh();dirty=false;conflict=false;ready=true;
     status(data.data?'Загружено из облака · редактирование разрешено':'Облако пустое · добавь группу или перенеси данные устройства');
     permissions();render();await loadScheduleSnapshot();
@@ -71,13 +72,13 @@
   window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));offline.checked=await localCopy.init();S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');await loadScheduleSnapshot();};
   document.getElementById('cloud-login').onsubmit=async e=>{
     e.preventDefault();token=document.getElementById('cloud-key').value.trim();document.getElementById('cloud-key').value='';status('Проверяю ключ…');
-    try{await api('/api/session');await pull();}catch(error){token='';ready=false;status(error.message);permissions();}
+    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;await pull();}catch(error){token='';ready=false;status(error.message);permissions();}
   };
   document.getElementById('cloud-pull').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Заменить несохранённые изменения облачной версией? Сначала можно скачать их.'))return;try{await pull();}catch(e){status(e.message);}};
   document.getElementById('cloud-push').onclick=()=>push();
   document.getElementById('cloud-draft').onclick=()=>download('starosta-draft-'+todayISO()+'.json',JSON.stringify(S),'application/json');
   document.getElementById('cloud-import').onclick=async()=>{if(!window.cloudCanEdit())return;if(!await askConfirm('Заменить общий журнал данными, сохранёнными на этом устройстве до входа?'))return;S=JSON.parse(JSON.stringify(localBackup));save();render();};
-  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;clearTimeout(timer);S=fresh();localBackup=null;view=null;ctx={};offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
+  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;usePublicSchedule=true;clearTimeout(timer);S=fresh();localBackup=null;view=null;ctx={};offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
   window.addEventListener('beforeunload',e=>{if(dirty||writing){e.preventDefault();e.returnValue='';}});
   setInterval(async()=>{if(!ready||dirty||writing||conflict||window.modalPending||document.hidden||document.activeElement?.matches('input,textarea,select'))return;const requestedRevision=revision;try{const data=await api('/api/state');if(!ready||dirty||writing||conflict||window.modalPending||revision!==requestedRevision)return;if(data.revision!==revision){revision=data.revision;S=Object.assign(fresh(),data.data||{});render();status('Получены изменения с другого устройства');}}catch(e){status('Облако недоступно · '+e.message);}},15000);
   permissions();

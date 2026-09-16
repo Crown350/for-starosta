@@ -614,7 +614,7 @@ async function loadScheduleSnapshot(){
 }
 
 async function refreshBGTU(){
-  if(window.cloudScheduleBlocked?.())return toast('Сначала разреши конфликт с облаком');
+  if(window.cloudScheduleBlocked?.())return toast('Обновление публичного расписания недоступно для этой сессии');
   if(ctx.bgtuBusy)return;
   const targetState=S;
   ctx.bgtuBusy=true;ctx.bgtuMessage='';ctx.bgtuFailed=false;render();
