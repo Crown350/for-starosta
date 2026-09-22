@@ -20,7 +20,7 @@ const store = {
 const NAMES = [];  // список группы заводится на телефоне, в коде его нет
 const SUBJ = ["Языки программирования","Дискретная математика","Математический анализ",
   "Алгебра и геометрия","Информатика","Основы системного анализа"];
-const KINDS = ["лекция","практика","лаба","семинар"];
+const KINDS = ["лекция","практика","лаба","семинар","Лекции","Практические занятия","Лабораторные работы","Электронные лекции"];
 const DOW = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
 
 function fresh(){
@@ -691,12 +691,12 @@ async function loadScheduleSnapshot(){
     S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
     S.schedule.contentHash=data.contentHash||null;
     S.schedule.lastError='';
-    save();render();
+    save();
   }catch{
     // Offline/missing fallback never overwrites existing lessons or shows a toast.
-    if(S===targetState)render();
   }finally{
     scheduleLoading=false;
+    if(S===targetState)render();
   }
 }
 
@@ -748,9 +748,9 @@ function viewBGTU(){
     </div>
     <button class="btn wide" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled aria-busy="true"':''}>${ctx.bgtuBusy?'<span class="schedule-spinner" aria-hidden="true"></span> Обновляю…':'Обновить расписание'}</button>
     ${ctx.bgtuMessage?`<p class="bgtu-source ${ctx.bgtuFailed?'schedule-error':''}" role="status">${esc(ctx.bgtuMessage)}</p>`:''}
+    ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}`:''}
     <p class="bgtu-source ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'schedule-stale':''}">Обновлено: ${m.fetchedAt?esc(new Date(m.fetchedAt).toLocaleString('ru-RU')):'нет снимка'}</p>
     ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
-    ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}`:''}
   </div>`;
   if(editable)h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||S.group||'Группа')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
   if(hasData){
@@ -1057,7 +1057,7 @@ document.addEventListener('click', async e=>{
       const f = await askForm({title:'Изменить пару',submit:'Сохранить',fields:[
         {name:'subjectId',label:'Предмет',type:'select',options:S.subjects.map(p=>({value:p.id,label:p.name})),value:l.subjectId,required:true},
         {name:'pair',label:'Номер пары',type:'number',value:String(l.pair),min:1,max:8,required:true},
-        {name:'kind',label:'Тип занятия',type:'select',options:[{value:'',label:'— не указан —'},...KINDS.map(k=>({value:k,label:k}))],value:l.kind||''},
+        {name:'kind',label:'Тип занятия',type:'select',options:[{value:'',label:'— не указан —'},...[...new Set([...KINDS,...(l.kind?[l.kind]:[])])].map(k=>({value:k,label:k}))],value:l.kind||''},
         {name:'teacherId',label:'Преподаватель',type:'select',options:[{value:'',label:'— не указан —'},...S.teachers.map(t=>({value:t.id,label:formatTeacherName(t.fio)}))],value:l.teacherId||''},
         {name:'room',label:'Аудитория',type:'text',value:l.room||'',placeholder:'например, А213'},
         {name:'date',label:'Дата',type:'date',value:l.date,required:true},

@@ -1,9 +1,10 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs'),vm=require('node:vm');const path=require('node:path');
 const root=path.join(__dirname,'..');
+const TEST_GROUP='ТЕСТ-ГРУППА';
 const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const navFn=source.slice(source.indexOf('const NAV_TABS={'),source.indexOf("let navSig='';"));
 const pairsFn=source.slice(source.indexOf('function viewPairs(){'),source.indexOf('function viewAtt(){'));
-const S={group:'24-ИБ',students:[{id:'s1',fio:'Иванов Иван'},{id:'s2',fio:'Петров Пётр'},{id:'s3',fio:'Сидоров Сидор'}],subjects:[{id:'p1',name:'Базы данных'}],teachers:[],lessons:[{id:'l1',date:'2026-09-15',pair:1,subjectId:'p1',kind:'лаба',room:'А215',time:'09:00'},{id:'l2',date:'2026-09-15',pair:2,subjectId:'p1',kind:'лекция',room:'311-4',time:'10:40'}],att:{l1:{s2:'n'}},tpl:[],schedule:{week:'odd',group:'24-ИБ'},limit:3};
+const S={group:TEST_GROUP,students:[{id:'s1',fio:'Иванов Иван'},{id:'s2',fio:'Петров Пётр'},{id:'s3',fio:'Сидоров Сидор'}],subjects:[{id:'p1',name:'Базы данных'}],teachers:[],lessons:[{id:'l1',date:'2026-09-15',pair:1,subjectId:'p1',kind:'лаба',room:'А215',time:'09:00'},{id:'l2',date:'2026-09-15',pair:2,subjectId:'p1',kind:'лекция',room:'311-4',time:'10:40'}],att:{l1:{s2:'n'}},tpl:[],schedule:{week:'odd',group:TEST_GROUP},limit:3};
 function pairs(editable){
  const c=vm.createContext({S,curDate:'2026-09-15',scheduleLoading:false,esc:String,plural:(n,a)=>n+' '+a,
   DOW:['вс','пн','вт','ср','чт','пт','сб'],dowOf:()=>2,fmtDate:x=>x,todayISO:()=>'2026-09-15',
@@ -39,7 +40,7 @@ test('shell ships an empty nav container for dynamic role-aware tabs',()=>{
 });
 const bgtuFn=source.slice(source.indexOf('function viewBGTU(){'),source.indexOf('function viewDir(){'));
 function bgtu(editable){
- const c=vm.createContext({ctx:{},S:{group:'24-ИБ',schedule:{group:'О-26-ИСТ-си-Б',week:'odd',fetchedAt:'2026-09-15T08:00:00Z'}},
+ const c=vm.createContext({ctx:{},S:{group:TEST_GROUP,schedule:{group:TEST_GROUP,week:'odd',fetchedAt:'2026-09-15T08:00:00Z'}},
   head:()=>'',esc:String,bgtuTpls:w=>[{dow:2,pair:1,time:'08:00 - 09:35',subjectId:'p1',teacherId:'t1',room:'231'}],
   DOW:['вс','пн','вт','ср','чт','пт','сб'],subjName:()=>'Алгебра',formatTeacherName:x=>x,teachName:()=>'',
   todayISO:()=>'2026-09-15',bgtuCurrentWeekForDate:()=>'odd',bgtuWeekLabel:w=>w,Date});
@@ -47,8 +48,10 @@ function bgtu(editable){
 }
 test('public BGTU schedule keeps preview only, controls live with editor',()=>{
  const html=bgtu(false);
- for(const text of ['превью','grouplist','openbgtu','О-26-ИСТ-си-Б','неделя'])assert.ok(html.includes(text),text);
- for(const text of ['syncbgtu','setweek','Обновлено','Обновить','Параметры зафиксированы'])assert.ok(!html.includes(text),text);
+ assert.ok(html.includes('Обновлено:'),'дата доступна гостю');
+ assert.ok(html.includes('Снимок старше 6 часов'),'устаревание видно гостю');
+ for(const text of ['превью','grouplist','openbgtu',TEST_GROUP,'неделя'])assert.ok(html.includes(text),text);
+ for(const text of ['syncbgtu','setweek','Обновить','Параметры зафиксированы'])assert.ok(!html.includes(text),text);
 });
 test('editor BGTU schedule exposes week toggle, sync and status',()=>{
  const html=bgtu(true);

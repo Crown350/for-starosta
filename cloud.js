@@ -85,7 +85,7 @@
     token=keyInput.value.trim();keyInput.value='';status('Проверяю ключ…');
     const err=document.getElementById('cloud-error');
     dlg.setAttribute('aria-busy','true');
-    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;dlg.close('ok');await pull();}
+    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;await pull();dlg.close('ok');}
     catch(error){token='';ready=false;permissions();err.textContent=error.message;err.hidden=false;keyInput.focus();}
     finally{dlg.removeAttribute('aria-busy');}
   };
