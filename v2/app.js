@@ -54,7 +54,7 @@ let curDate = todayISO();
 /* ============================ УТИЛИТЫ ============================ */
 const $ = id => document.getElementById(id);
 const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
-function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function todayISO(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); }
 function fmtDate(iso){ const [y,m,d]=iso.split('-'); return `${d}.${m}.${y}`; }
 function dowOf(iso){ return new Date(iso+'T12:00:00').getDay(); }
@@ -210,7 +210,7 @@ function viewPairs(){
   let h = head('Сегодня', `${DOW[d]} · БГТУ: ${bgtuWeekLabel(bgtuCurrentWeekForDate(curDate))} неделя`) + `
     <div class="row date-row">
       <button class="iconbtn" data-act="dshift" data-v="-1" aria-label="Предыдущий день">‹</button>
-      <input type="date" id="curDate" value="${curDate}" aria-label="Дата">
+      <input type="date" id="curDate" value="${esc(curDate)}" aria-label="Дата">
       <button class="iconbtn" data-act="dshift" data-v="1" aria-label="Следующий день">›</button>
       <button class="btn ghost" data-act="today">Сегодня</button>
     </div></header>`;
@@ -227,7 +227,7 @@ function viewPairs(){
       ? `<div><small>Не пришли</small><strong>${nMiss+uMiss}</strong><span>${nMiss} Н · ${uMiss} У</span></div>`
       : `<div><strong>${DOW[d][0].toUpperCase()+DOW[d].slice(1)}</strong><span>${bgtuWeekLabel(bgtuCurrentWeekForDate(curDate))} неделя</span></div>`;
     h += `<div class="hero"><div><strong>${plural(ls.length,'пара','пары','пар')}</strong></div>${heroRight}</div>`;
-    h += `<div class="section-title"><span>${editable?'Нажми на пару, чтобы отметить':'Расписание дня'}</span><b>${fmtDate(curDate)}</b></div><ul class="grouplist">`;
+    h += `<div class="section-title"><span>${editable?'Нажми на пару, чтобы отметить':'Расписание дня'}</span><b>${esc(fmtDate(curDate))}</b></div><ul class="grouplist">`;
     ls.forEach(l=>{
       const a = S.att[l.id]||{};
       let ln=0,lu=0; Object.values(a).forEach(v=>{ if(v==='n')ln++; else if(v==='u')lu++; });
@@ -269,7 +269,7 @@ function viewAtt(){
   const a = attOf(l.id);
   let n=0,u=0; Object.values(a).forEach(v=>{ if(v==='n')n++; else if(v==='u')u++; });
   const tot=S.students.length||1, was=S.students.length-n-u;
-  let h = head(subjName(l.subjectId), `${fmtDate(l.date)} · ${l.pair} пара · ${esc(l.kind||'')}${l.room?' · ауд. '+esc(l.room):''} <button class="back" data-act="editlesson" data-id="${l.id}">изменить</button>`, 1) + `
+  let h = head(subjName(l.subjectId), `${esc(fmtDate(l.date))} · ${l.pair} пара · ${esc(l.kind||'')}${l.room?' · ауд. '+esc(l.room):''} <button class="back" data-act="editlesson" data-id="${l.id}">изменить</button>`, 1) + `
     <div class="bar">
       <div class="bartrack">
         <div class="barfill" style="width:${was/tot*100}%"></div>
@@ -909,7 +909,7 @@ function viewImport(){
       <label for="import-lesson">Куда поставить отметки</label>
       ${ls.length?`<select id="import-lesson" data-act="importlesson">
         ${ls.map(l=>`<option value="${l.id}"${ctx.importLesson===l.id?' selected':''}>${l.pair} пара · ${esc(subjName(l.subjectId))}${l.time?' · '+esc(l.time):''}</option>`).join('')}
-      </select>`:`<p class="hint hint-plain">На ${fmtDate(curDate)} пар нет — сначала добавь пару во вкладке «Сегодня».</p>`}
+      </select>`:`<p class="hint hint-plain">На ${esc(fmtDate(curDate))} пар нет — сначала добавь пару во вкладке «Сегодня».</p>`}
     </div></div>`;
     if(!ctx.importLesson && ls.length) ctx.importLesson=ls[0].id;
   }
