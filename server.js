@@ -308,7 +308,18 @@ function server() {
       if (req.method === 'GET') {
         const fs = require('node:fs');
         const path = require('node:path');
+        if (url.pathname === '/v2') { res.writeHead(308, {Location:'v2/'}); return res.end(); }
         const files = {
+          '/ui-mode.js': ['ui-mode.js','application/javascript; charset=utf-8'],
+          '/api-transport.js': ['api-transport.js','application/javascript; charset=utf-8'],
+          '/v2/': ['v2/index.html','text/html; charset=utf-8'],
+          '/v2/index.html': ['v2/index.html','text/html; charset=utf-8'],
+          '/v2/styles.css': ['v2/styles.css','text/css; charset=utf-8'],
+          '/v2/app.js': ['v2/app.js','application/javascript; charset=utf-8'],
+          '/v2/cloud.js': ['v2/cloud.js','application/javascript; charset=utf-8'],
+          '/v2/dialogs.js': ['v2/dialogs.js','application/javascript; charset=utf-8'],
+          '/v2/sw.js': ['v2/sw.js','application/javascript; charset=utf-8'],
+          '/v2/manifest.webmanifest': ['v2/manifest.webmanifest','application/manifest+json; charset=utf-8'],
           '/': ['index.html','text/html; charset=utf-8'],
           '/index.html': ['index.html','text/html; charset=utf-8'],
           '/data/curriculum.json': ['data/curriculum.json','application/json; charset=utf-8'],
@@ -335,7 +346,7 @@ function server() {
           if (!fs.existsSync(full) && url.pathname==='/data/curriculum.json'){res.writeHead(204,{'Cache-Control':'no-store'});return res.end();}
           if (!fs.existsSync(full)) return json(res, 404, { ok:false, error:`Файл ${item[0]} не найден` });
           const file = fs.readFileSync(full);
-          res.writeHead(200, { 'Content-Type': item[1], 'Cache-Control': url.pathname === '/sw.js' ? 'no-store' : 'no-cache' });
+          res.writeHead(200, { 'Content-Type': item[1], 'Cache-Control': item[0].endsWith('sw.js') ? 'no-store' : 'no-cache' });
           return res.end(file);
         }
       }

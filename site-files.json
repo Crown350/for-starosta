@@ -19,5 +19,13 @@
   "vendor/ocr/rus.traineddata.gz",
   "vendor/ocr/LICENSE-core.txt",
   "vendor/ocr/LICENSE-tesseract.txt",
-  "api-transport.js"
+  "api-transport.js",
+  "ui-mode.js",
+  "v2/index.html",
+  "v2/styles.css",
+  "v2/app.js",
+  "v2/cloud.js",
+  "v2/dialogs.js",
+  "v2/sw.js",
+  "v2/manifest.webmanifest"
 ]
