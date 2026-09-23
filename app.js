@@ -466,6 +466,9 @@ function viewMore(){
     `:''}
       <p class="hint">Журнал хранится в облаке. Копия на устройстве сохраняется только с твоего согласия и удаляется при выходе.</p>
     <p class="hint">Версия ${APP_V}</p>
+    <h2>Интерфейс</h2>
+    <p class="hint">Сейчас включён старый режим</p>
+    <a class="btn ghost wide ui-mode-link" data-ui-mode="new" href="v2/">Переключиться на новый режим</a>
     <div style="height:20px"></div>`;
 }
 
@@ -1199,7 +1202,7 @@ async function startApp(){
   measure();
   if(window.ResizeObserver) new ResizeObserver(measureSoon).observe($('nav'));
   setTimeout(measure, 300);
-  if('serviceWorker' in navigator && location.protocol==='https:'){
+  if('serviceWorker' in navigator && window.isSecureContext){
     const had = !!navigator.serviceWorker.controller;
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://piwxslgxwmdrehnomymt.supabase.co https://functions.yandexcloud.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<script src="../ui-mode.js"></script>
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Студенческий журнал</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css?v=ui11">
+<meta name="theme-color" content="#f4efe7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0c0b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Староста">
+<link rel="apple-touch-icon" href="../icon-180.png">
+</head>
+<body>
+<main class="wrap" id="app"></main>
+<nav id="nav" aria-label="Основные разделы"></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="../config.js?v=ui11"></script>
+<script src="../api-transport.js?v=ui11"></script>
+<script src="app.js?v=ui11"></script>
+<script src="dialogs.js?v=ui11"></script>
+<script src="../local-copy.js"></script>
+<script src="cloud.js?v=ui11"></script>
+</body>
+</html>
