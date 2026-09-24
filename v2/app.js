@@ -550,6 +550,7 @@ function viewMore(){
     `:''}
       <p class="hint">Журнал хранится в облаке. Копия на устройстве сохраняется только с твоего согласия и удаляется при выходе.</p>
     <p class="hint">Версия ${APP_V}</p>
+    <button class="btn ghost wide" type="button" data-whats-new>Что нового</button>
     <h2>Интерфейс</h2>
     <p class="hint">Сейчас включён новый режим</p>
     <a class="btn ghost wide ui-mode-link" data-ui-mode="old" href="../">Переключиться на старый режим</a>
@@ -1342,6 +1343,7 @@ async function startApp(){
   await window.cloudInit();
   render();
   measure();
+  window.whatsNewReady?.();
   if(window.ResizeObserver) new ResizeObserver(measureSoon).observe($('nav'));
   setTimeout(measure, 300);
   if('serviceWorker' in navigator && window.isSecureContext){
