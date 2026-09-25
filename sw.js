@@ -1,6 +1,6 @@
 const CACHE='starosta-old-v1';
 const BASE=new URL('./',self.location.href);
-const SHELL=["","index.html","v2/","v2/index.html","schedule.json","data/curriculum.json","ui-mode.js","whats-new.js","manifest.webmanifest","icon-180.png","config.js?v=proxy-1","api-transport.js?v=failover-2","app.js?v=group-isolation-1","dialogs.js","local-copy.js","cloud.js?v=session-cache-1","v2/manifest.webmanifest","v2/styles.css?v=ui11","config.js?v=ui11","api-transport.js?v=ui11","v2/app.js?v=ui11","v2/dialogs.js?v=ui11","v2/cloud.js?v=ui11"].map(path=>new URL(path,BASE).href);
+const SHELL=["","index.html","v2/","v2/index.html","schedule.json","data/curriculum.json","ui-mode.js","whats-new.js","manifest.webmanifest","icon-180.png","config.js?v=proxy-1","api-transport.js?v=failover-2","app.js?v=group-isolation-1","dialogs.js","local-copy.js","cloud.js?v=session-cache-1","v2/manifest.webmanifest","v2/styles.css?v=weektable6","config.js?v=ui11","api-transport.js?v=ui11","v2/app.js?v=weektable6","v2/dialogs.js?v=ui11","v2/cloud.js?v=ui11"].map(path=>new URL(path,BASE).href);
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE&&(k.startsWith('starosta-old-')||/^starosta-v\d+$/.test(k))).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{

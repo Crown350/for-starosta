@@ -178,6 +178,8 @@ function render(){
   if(tab==='semester'&&!(typeof curriculum!=='undefined'&&curriculum.length))tab='pairs';
   renderNav();
   const app=$('app');
+  const screen=(view==='bgtu'||(view==null&&tab==='schedule'))?'bgtu':(view||tab);
+  if(document.body.dataset.screen!==screen)document.body.dataset.screen=screen;
   if(view==='att') return app.innerHTML = viewAtt();
   if(view==='work') return app.innerHTML = viewWork();
   if(view==='fund') return app.innerHTML = viewFund();
@@ -567,8 +569,14 @@ function pairFromTime(time){
 }
 
 function bgtuWeekLabel(w){ return w==='even'?'чётная':'нечётная'; }
+function bgtuWeekGenitive(w){ return w==='even'?'чётной':'нечётной'; }
 function bgtuTpls(week){
-  return (S.tpl||[]).filter(t=>t.source==='bgtu' && (t.week||'odd')===week);
+  /* Номер пары и день приходят из источника строками и в произвольном порядке,
+     поэтому приводим их к числам и отбрасываем мусор: иначе сравнение с === ничего не найдёт. */
+  return (S.tpl||[])
+    .filter(t=>t&&t.source==='bgtu'&&(t.week||'odd')===week)
+    .map(t=>({...t,dow:Math.round(+t.dow),pair:Math.round(+t.pair)}))
+    .filter(t=>t.dow>=1&&t.dow<=7&&t.pair>=1);
 }
 function bgtuCurrentWeekForDate(iso){
   const anchor=S.schedule?.weekAnchor || todayISO();
@@ -733,10 +741,10 @@ async function refreshBGTU(){
 function viewBGTU(){
   const m=S.schedule||{};
   const editable=window.cloudCanEdit?.();
-  const odd=bgtuTpls('odd').length, even=bgtuTpls('even').length;
-  const hasData=odd||even;
+  const hasData=bgtuTpls('odd').length||bgtuTpls('even').length;
   const asView=typeof view!=='undefined'&&view==='bgtu';
-    let h=head('Расписание БГТУ','официальное расписание',asView?1:undefined)+`</header>`;
+  const week=bgtuCurrentWeekForDate(todayISO());
+    let h=head('Расписание','официальное расписание БГТУ',asView?1:undefined)+`</header>`;
   h+=`<div class="card">
     <div class="fio"><b>${esc(m.group||S.group||'Группа')}</b></div>
     <p class="bgtu-source">${esc(m.profile||'Системы искусственного интеллекта и обработка больших данных')} · ${esc(m.code||'09.03.02')} · ${esc(m.form||'Очное')}</p>
@@ -746,28 +754,186 @@ function viewBGTU(){
       <span class="chip">${esc(m.education||'бакалавр')}</span>
     </div>
     ${editable?`
-    <div class="bgtu-week">
-      <button class="btn ghost ${m.week==='odd'?'active':''}" data-act="setweek" data-v="odd">Нечётная</button>
-      <button class="btn ghost ${m.week==='even'?'active':''}" data-act="setweek" data-v="even">Чётная</button>
-    </div>
     <button class="btn wide" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled aria-busy="true"':''}>${ctx.bgtuBusy?'<span class="schedule-spinner" aria-hidden="true"></span> Обновляю…':'Обновить расписание'}</button>
-    ${ctx.bgtuMessage?`<p class="bgtu-source ${ctx.bgtuFailed?'schedule-error':''}" role="status">${esc(ctx.bgtuMessage)}</p>`:''}
-    ${hasData?`<div class="bgtu-meta"><span class="chip ok">Нечётная: ${odd}</span><span class="chip">Чётная: ${even}</span></div>`:''}`:''}
+    ${ctx.bgtuMessage?`<p class="bgtu-source ${ctx.bgtuFailed?'schedule-error':''}" role="status">${esc(ctx.bgtuMessage)}</p>`:''}`:''}
     <p class="bgtu-source ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'schedule-stale':''}">Обновлено: ${m.fetchedAt?esc(new Date(m.fetchedAt).toLocaleString('ru-RU')):'нет снимка'}</p>
     ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
   </div>`;
   if(editable)h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||S.group||'Группа')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
-  if(hasData){
-    const week=editable?(m.week==='even'?'even':'odd'):bgtuCurrentWeekForDate(todayISO());
-    const rows=(week==='even'?bgtuTpls('even'):bgtuTpls('odd')).sort((a,b)=>a.dow-b.dow || a.pair-b.pair);
-    h+=`<h2>${bgtuWeekLabel(week)} неделя · превью</h2><ul class="grouplist">`;
-    rows.forEach(r=>{
-      h+=`<li><div class="top"><span class="pairno">${r.pair||'—'}</span><span class="fio"><b>${esc(DOW[r.dow]||'')}</b><small>${esc(r.time||'')}${r.subjectId?` · ${esc(subjName(r.subjectId))}`:''}${r.teacherId?` · ${esc(formatTeacherName(teachName(r.teacherId)))}`:''}${r.room?' · '+esc(r.room):''}</small></span></div></li>`;
-    });
-
-    h+=`</ul>`;
-  }
+  if(hasData)h+=bgtuWeekTable(week);
   h+=`<div class="row"><button class="btn ghost wide" data-act="openbgtu">Открыть официальный сайт БГТУ</button></div>`;
+  return h;
+}
+
+/* ---------- НЕДЕЛЯ: таблица «пара × день», обе недели сразу ---------- */
+function bgtuSlot(time){
+  const m=String(time||'').match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
+  if(m) return {s:+m[1]*60+ +m[2], e:+m[3]*60+ +m[4]};
+  const s=String(time||'').match(/(\d{1,2}):(\d{2})/);
+  return s? {s:+s[1]*60+ +s[2], e:+s[1]*60+ +s[2]+95} : {s:0,e:0};
+}
+function bgtuHm(min){ return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
+const BGTU_DOW_S=['пн','вт','ср','чт','пт','сб','вс'];
+const BGTU_SHORT={
+  'основы российской государственности':'ОРГ',
+  'физическая культура и спорт. общая физическая подготовка':'Физкультура',
+  'физическая культура и спорт':'Физкультура',
+  'технологии личностно-профессионального развития':'Технологии ЛПР'
+};
+function bgtuShortName(id){
+  const name=String(subjName(id)||'').trim().replace(/\s*\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();
+  const known=BGTU_SHORT[name.toLowerCase()];
+  if(known)return known;
+  if(name.length<=44)return name;
+  const cut=name.slice(0,44);
+  return cut.slice(0,cut.lastIndexOf(' ')>24?cut.lastIndexOf(' '):44).trim()+'…';
+}
+function bgtuTeacherShort(id){
+  if(!id)return '';
+  const fio=String(formatTeacherName(teachName(id))||'').trim();
+  if(!fio||/^ваканси/i.test(fio))return '';
+  return fio.split(/\s+/)[0];
+}
+const BGTU_KIND={'лекции':'лекция','практические занятия':'практика','лабораторные работы':'лабораторная',
+  'электронные лекции':'эл. лекция','лекция':'лекция','практика':'практика','лаба':'лабораторная',
+  'лабораторная':'лабораторная','семинар':'семинар'};
+function bgtuKindLabel(kind){
+  const k=String(kind||'').trim().toLowerCase();
+  return BGTU_KIND[k]||(/^[а-яё]{3,12}$/i.test(k)?k:'');
+}
+const atPair=(list,dow,pair)=>list.find(t=>t.dow===dow&&t.pair===pair)||null;
+/* Совпадают ли две записи полностью — тогда клетка не делится пополам. */
+function bgtuSameLesson(a,b){
+  return !!a&&!!b&&a.subjectId===b.subjectId&&a.pair===b.pair
+    &&String(a.time||'')===String(b.time||'')&&String(a.kind||'')===String(b.kind||'')
+    &&String(a.room||'')===String(b.room||'')&&String(a.teacherId||'')===String(b.teacherId||'');
+}
+/* Состояние половинки клетки для одной недели: занятие, окно между её парами или свободно.
+   Окно — разрыв между парами этой же недели: нужна пара и выше, и ниже. */
+function bgtuHalfState(list,dow,pair,maxPair,has){
+  const row=atPair(list,dow,pair);
+  if(row)return{kind:'class',row};
+  let prev=0,next=0;
+  for(let p=pair-1;p>=1;p--)if(has(list,dow,p)){prev=p;break;}
+  for(let p=pair+1;p<=maxPair;p++)if(has(list,dow,p)){next=p;break;}
+  if(!prev||!next)return{kind:'free'};
+  const from=bgtuSlot(atPair(list,dow,prev).time).e;
+  const to=bgtuSlot(atPair(list,dow,next).time).s;
+  if(to<=from)return{kind:'free'};
+  return{kind:'win',from,to,first:pair===prev+1};
+}
+function bgtuHalf(part,compact,cur){
+  const tag=part.tag;
+  /* Половинка той недели, которая сейчас не идёт, помечается off - её приглушают. */
+  const off=(tag==='both'||tag===cur)?'':' off';
+  if(part.kind==='win'){
+    return `<div class="we win${tag==='even'?' alt':''}${off}"><span>окно</span>`
+      +`<b>${bgtuHm(part.from)}–${bgtuHm(part.to)}</b></div>`;
+  }
+  const row=part.row;
+  const who=compact?'':' · '+bgtuTeacherShort(row.teacherId);
+  const kind=bgtuKindLabel(row.kind);
+  return `<div class="we${tag==='both'?' both':(tag==='even'?' alt':'')}${off}">`
+    +`<b>${esc(bgtuShortName(row.subjectId))}</b>`
+    +`<small class="meta">${kind?`<span class="k">${esc(kind)}</span>`:''}`
+    +(row.room?`<span class="r">${esc(row.room)}</span>`:'')+(who?`<span class="t2">${esc(who)}</span>`:'')+`</small>`
+    +`</div>`;
+}
+function bgtuWeekTable(week){
+  const odd=bgtuTpls('odd'), even=bgtuTpls('even');
+  const has=(list,dow,pair)=>!!atPair(list,dow,pair);
+  const all=[...odd,...even];
+  /* Столбцы — только те дни, в которые есть хоть одна пара, и всегда по порядку:
+     ни количество, ни порядок записей в данных на таблицу не влияют. */
+  const cols=[...new Set(all.map(t=>t.dow))].sort((a,b)=>a-b);
+  const days=cols.length?cols:[1,2,3,4,5,6];
+  const maxPair=all.reduce((m,t)=>Math.max(m,t.pair),0);
+  /* Время строки — самое раннее среди всех записей этого номера пары. */
+  const slotByPair={};
+  all.forEach(t=>{
+    if(!t.time)return;
+    const slot=bgtuSlot(t.time),cur=slotByPair[t.pair];
+    if(!cur||slot.s<cur.s)slotByPair[t.pair]=slot;
+  });
+  const todayDow=dowOf(todayISO());
+
+  /* Строки таблицы: настоящие пары и одна свёрнутая строка на пропуск номеров.
+     Схлопывается любая непрерывная серия номеров без занятий — хоть 5–7, хоть одна 4-я. */
+  const rows=[];
+  let skipped=[];
+  for(let p=1;p<=maxPair;p++){
+    if(days.some(d=>has(odd,d,p)||has(even,d,p))){
+      if(skipped.length){rows.push({skipped});skipped=[];}
+      rows.push({pair:p});
+    }else skipped.push(p);
+  }
+  if(skipped.length)rows.push({skipped});
+  if(!rows.some(r=>r.pair))return '<p class="hint">В расписании нет ни одной пары.</p>';
+
+  let h=`<h2>Обе недели: сейчас ${bgtuWeekLabel(week)}</h2>`
+    +'<div class="bwside"><ul class="legend">'
+    +`<li><span class="lg w${week==='odd'?' cur':''}">н</span>нечётная неделя — половинка сверху</li>`
+    +`<li><span class="lg c${week==='even'?' cur':''}">ч</span>чётная неделя — половинка снизу</li>`
+    +'<li><span class="lg gap"></span>окно между парами этой недели</li>'
+    +'</ul></div>'
+    +`<div class="bwscroll"><table class="bw" style="--bwcols:${days.length}"><caption class="sr-only">Расписание на нечётную и чётную недели: строки — номера пар, столбцы — дни недели</caption>`
+    +'<thead><tr><th class="pcol dhead"><span class="dh-day">день</span><span class="dh-pair">пара</span></th>';
+  for(const dow of days){
+    const isToday=dow===todayDow;
+    /* Считаем номера пар, а не записи: дубль одной пары не должен завышать счётчик. */
+    const n=list=>new Set(list.filter(t=>t.dow===dow).map(t=>t.pair)).size;
+    h+=`<th scope="col" class="${isToday?'today':''}"><b>${BGTU_DOW_S[dow-1].toUpperCase()}</b>`
+      +`<small>${isToday?'сегодня':n(odd)+'/'+n(even)+' н/ч'}</small></th>`;
+  }
+  h+='</tr></thead><tbody>';
+
+  let prevOcc=null;
+  rows.forEach((row,ri)=>{
+    if(row.skipped){
+      const list=row.skipped;
+      const label=list.length>1?list[0]+'–'+list[list.length-1]:String(list[0]);
+      h+=`<tr class="gaprow"><th class="pcol" scope="row">${label}</th>`
+        +`<td colspan="${days.length}">пар нет</td></tr>`;
+      prevOcc=null;
+      return;
+    }
+    const occ=days.map(d=>has(odd,d,row.pair)||has(even,d,row.pair));
+    const slot=slotByPair[row.pair];
+    /* Строка прямо над свёрнутым блоком отдаёт ему свою нижнюю границу. */
+    const pre=rows[ri+1]&&rows[ri+1].skipped;
+    h+=`<tr${pre?' class="pre"':''}><th class="pcol" scope="row"><b>${row.pair}</b>`
+      +(slot?`<small>${bgtuHm(slot.s)}</small>`:'')+`</th>`;
+    days.forEach((dow,di)=>{
+      const o=bgtuHalfState(odd,dow,row.pair,maxPair,has);
+      const e=bgtuHalfState(even,dow,row.pair,maxPair,has);
+      let parts=[];
+      if(o.kind==='class'&&e.kind==='class'&&bgtuSameLesson(o.row,e.row)){
+        parts=[{tag:'both',kind:'class',row:o.row}];
+      }else{
+        if(o.kind==='class')parts.push({tag:'odd',kind:'class',row:o.row});
+        else if(o.kind==='win'&&o.first)parts.push({tag:'odd',kind:'win',from:o.from,to:o.to});
+        if(e.kind==='class')parts.push({tag:'even',kind:'class',row:e.row});
+        else if(e.kind==='win'&&e.first)parts.push({tag:'even',kind:'win',from:e.from,to:e.to});
+      }
+      /* Сетка идёт только по занятым ячейкам. Справа и снизу линию рисует сама ячейка,
+         а слева и сверху - только там, где соседняя ячейка пустая: иначе граница
+         занятой области остаётся незамкнутой. */
+      const cls=[];
+      if(dow===todayDow)cls.push('today');
+      if(!parts.length)cls.push('gap');
+      else{
+        if(di>0&&!occ[di-1])cls.push('el');
+        if(prevOcc&&!prevOcc[di])cls.push('et');
+      }
+      h+=`<td class="${cls.join(' ')}"><div class="wc">`
+        +parts.map(p=>bgtuHalf(p,parts.length===1,week)).join('')
+        +`</div></td>`;
+    });
+    prevOcc=occ;
+    h+='</tr>';
+  });
+  h+=`</tbody></table></div>`
+    +'<p class="hint">Строки — пары со временем, столбцы — дни. На телефоне таблица прокручивается вбок, колонка с номером пары остаётся на месте.</p>';
   return h;
 }
 
@@ -1159,7 +1325,6 @@ document.addEventListener('click', async e=>{
     case 'syncbgtu': refreshBGTU(); return;
     case 'gobgtu': view='bgtu'; break;
     case 'gosemester': tab='semester'; view=null; ctx={}; break;
-    case 'setweek': { if(S.schedule) S.schedule.week=btn.dataset.v; break; }
     case 'openbgtu': window.open('https://www.tu-bryansk.ru/education/schedule/','_blank','noopener'); return;
     case 'godir': view='dir'; ctx.dir=btn.dataset.v; break;
     case 'gotpl': view='tpl'; break;
