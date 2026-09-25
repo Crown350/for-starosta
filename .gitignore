@@ -25,3 +25,13 @@ editor-keys*.txt
 # Local JSON/JSONL exports, logs and private configuration
 /local-private/
 
+# Local Docker setup
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.yaml
+docker-compose.*.yml
+.dockerignore
+.docker/
+
+
