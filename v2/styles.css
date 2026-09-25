@@ -428,13 +428,130 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 
 /* --- БГТУ: расписание --- */
 .bgtu-meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
-.bgtu-week{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
-.bgtu-week+.btn{margin-top:9px}
 .bgtu-source{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:9px 2px 0}
 .schedule-stale{color:var(--warn);font-weight:650}
 .schedule-error{color:var(--bad)}
 .schedule-spinner{display:inline-block;width:1em;height:1em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:schedule-spin .8s linear infinite;vertical-align:-.15em}
 @keyframes schedule-spin{to{transform:rotate(360deg)}}
+
+/* --- Неделя: таблица «пара × день», нечётная и чётная вместе --- */
+/* Колонки фиксированной ширины: на десктопе таблица занимает всю ширину и не прокручивается,
+   на телефоне — свайп вбок. */
+@media (min-width:900px){ body[data-screen=bgtu] .wrap{max-width:1140px} }
+/* Полоски — фон самой рамки, а не tbody: полотно одно на всю таблицу, поэтому
+   диагонали идут единой лентой через любые пустые места, включая свёрнутые строки. */
+/* Отступа снизу нет: нижняя граница последней строки совпадает с нижней границей
+   рамки, иначе под таблицей остаётся пустая полоса. */
+.bwscroll{min-width:0;max-width:100%;width:fit-content;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  margin:10px auto 0;border:1px solid var(--line);border-radius:var(--r-lg);
+  background:repeating-linear-gradient(135deg,var(--surface-2) 0 6px,var(--surface) 6px 12px);
+  box-shadow:var(--shadow-sm)}
+.bwscroll table{background:none}
+/* Ширина зависит от числа столбцов: под них считается минимальная, иначе
+   при трёх днях таблица прокручивалась бы вбок, а столбец не может стать
+   шире 300 px — иначе при двух днях карточки растягиваются на всю страницу. */
+.bw{table-layout:fixed;width:100%;max-width:calc(84px + var(--bwcols,6)*300px);margin:0 auto;
+  min-width:calc(84px + var(--bwcols,6)*124px);border-collapse:separate;border-spacing:0}
+.bw th,.bw td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);vertical-align:top}
+.bw th:last-child,.bw td:last-child{border-right:0}
+/* Нижнюю границу последней строки замыкает рамка контейнера. */
+.bw tbody tr:last-child th,.bw tbody tr:last-child td{border-bottom:0}
+.bw thead th{background:var(--surface-2);padding:9px 11px;text-align:left;white-space:nowrap;
+  font-size:11.5px;font-weight:700;color:var(--ink-soft)}
+.bw thead th b{font-size:14px;font-weight:800;letter-spacing:.04em;color:var(--ink)}
+.bw thead th small{display:block;font-size:10.5px;font-weight:600;color:var(--ink-dim);margin-top:2px}
+.bw .pcol{position:sticky;left:0;z-index:2;background:var(--surface-2);width:84px;
+  padding:11px 10px;text-align:left;white-space:nowrap}
+.bw .pcol b{display:block;font-size:19px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.bw .pcol small{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-top:4px;
+  font-variant-numeric:tabular-nums}
+/* Левый верхний угол разделён по диагонали: «день» под заголовками дней,
+   «пара» над номерами пар. Полоса идёт из левого нижнего угла в правый верхний. */
+.bw thead .pcol{z-index:4;padding:0;
+  background-image:linear-gradient(to top right,transparent calc(50% - .6px),var(--line) calc(50% - .6px),
+    var(--line) calc(50% + .6px),transparent calc(50% + .6px))}
+.bw thead .pcol .dh-day{position:absolute;right:8px;top:5px;font-size:9.5px;font-weight:800;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+.bw thead .pcol .dh-pair{position:absolute;left:8px;bottom:5px;font-size:9.5px;font-weight:800;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+/* Все клетки одного размера: две «половинки» на пару, неделя занимает ровно половину.
+   Занятые блоки закрывают полоски собой, свободные половинки и пустые клетки — нет. */
+/* Рамка только справа и снизу: иначе на стыке строк нижняя и верхняя границы
+   складываются в полосу вдвое шире линии сетки. Высота 153, а не 152: снизу
+   ячейки уходит граница в 1 px, и половинки по 76 px делятся пополам ровно,
+   иначе делитель встаёт на полпикселя и в соседних столбцах расходится. */
+.bw td{position:relative;height:153px;padding:0;vertical-align:top;
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+/* Сетка только по занятым ячейкам: где пар нет ни в одну из недель, рамки нет. */
+.bw td.gap{border-color:transparent}
+/* Границы занятой области там, где соседняя ячейка пустая. */
+.bw td.el{border-left:1px solid var(--line)}
+.bw td.et{border-top:1px solid var(--line)}
+/* Флекс живёт внутри обёртки: display:flex на самой td выводит её из таблицы.
+   Обёртка растянута абсолютно — тогда половинки всегда ровно 50%, независимо от того,
+   как браузер считает проценты высоты внутри ячейки таблицы. */
+.bw td .wc{position:absolute;inset:0;display:flex;flex-direction:column}
+/* Каждая неделя занимает ровно свою половинку; вторая, если пара есть только в одной
+   неделе, остаётся свободной и показывает полоски. */
+.bw td .we{flex:0 0 50%;min-height:0;position:relative;padding:8px 11px;background:var(--surface);
+  display:flex;flex-direction:column;justify-content:center}
+.bw td .we.both{flex:0 0 100%}
+.bw td .we.alt{margin-top:auto}
+.bw td .we b{font-size:14px;font-weight:650;line-height:1.3;letter-spacing:-.012em;
+  hyphens:auto;overflow-wrap:break-word;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* подпись: вид занятия · аудитория · преподаватель */
+.bw td .we .meta{display:flex;flex-wrap:nowrap;align-items:baseline;gap:3px 6px;overflow:hidden;
+  font-size:12px;line-height:1.35;color:var(--ink-dim);margin-top:4px;white-space:nowrap}
+.bw td .we .meta .k{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-soft);white-space:nowrap;flex:none}
+.bw td .we .meta .r{white-space:nowrap;flex:none}
+.bw td .we .meta .t2{overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* Окно — такой же фон, как у карточки пары: иначе оно неотличимо от пары
+   приглушённой недели. Заливку и цвет приглушённого окна даёт правило .off ниже. */
+.bw td .we.win{align-items:center;justify-content:center;text-align:center}
+.bw td .we.win span{font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+.bw td .we.win b{font-size:14px;font-weight:700;color:var(--ink);margin-top:3px;font-variant-numeric:tabular-nums}
+/* Приглушена та неделя, которая сейчас не идёт: половинка снизу, если идёт
+   нечётная, и наоборот. Пара, одинаковая в обе недели, не приглушается. */
+.bw td .we.off{background:var(--surface-2)}
+.bw td .we.off b{font-weight:600;color:var(--ink-soft)}
+.bw td .we.off.win span{color:var(--ink-dim)}
+/* Границы между половинами, когда н и ч разные: делитель двух занятых половин
+   и край занятой половинки со свободной. Цветом сетки. Снизу и сбока блок уже
+   ограничен рамкой ячейки: своей рамки у него нет, иначе поверх границы ячейки
+   ложится вторая линия, заметно ярче сетки. */
+.bw td .we + .we,
+.bw td .we.alt:only-child{border-top:1px solid var(--line)}
+/* У одиночной верхней половинки линия встаёт на то же место, что и делитель, -
+   под блоком, а не внутри его рамки, иначе она на пиксель выше. */
+.bw td .we:not(.alt):not(.both):only-child::after{content:'';position:absolute;
+  left:0;right:0;top:100%;height:1px;background:var(--line)}
+.bw thead th.today{background:color-mix(in srgb,var(--accent) 12%,var(--surface-2));color:var(--accent)}
+.bw thead th.today small{color:var(--accent);font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+/* Сегодняшний день: приглушена так же та неделя, которая не идёт сейчас,
+   поэтому акцент ложится на обе половинки, но приглушенная слабее. */
+.bw td.today .we{background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.bw td.today .we.off{background:color-mix(in srgb,var(--accent) 5%,var(--surface-2))}
+.bw td.today .we.win{background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.bw td.today .we.win.off{background:color-mix(in srgb,var(--accent) 5%,var(--surface-2))}
+/* Строка свёрнутых номеров пар: полоски из рамки .bwscroll, линии по краям блока.
+   Верхняя линия - своя: у строки выше своей нижней границы нет, иначе линия была бы
+   вдвое толще там, где у той строки есть занятые ячейки. */
+.bw tr.pre th,.bw tr.pre td{border-bottom:0}
+.bw tr.gaprow th,.bw tr.gaprow td{background:transparent;padding:5px 10px;white-space:nowrap;
+  font-size:11.5px;font-weight:600;color:var(--ink-dim);height:auto;
+  border-right:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.bw tr.gaprow td{vertical-align:middle;text-align:right;
+  font-size:10px;letter-spacing:.04em;text-transform:uppercase}
+.bwside{display:flex;justify-content:flex-end;margin:8px 0 0}
+.legend{list-style:none;display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 2px}
+.legend li{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-soft)}
+.lg{width:16px;height:16px;border-radius:5px;flex:none;font-size:9.5px;font-weight:800;
+  display:grid;place-items:center;line-height:1;text-transform:uppercase}
+.lg.w,.lg.c{background:var(--surface-2);color:var(--ink-soft);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.lg.cur{background:var(--accent);color:var(--on-accent);box-shadow:none}
+.lg.gap{background:repeating-linear-gradient(135deg,var(--surface-2),var(--surface-2) 3px,var(--surface) 3px,var(--surface) 6px);box-shadow:inset 0 0 0 1px var(--line-strong)}
 
 /* --- Семестр --- */
 .semester-summary{display:flex;flex-wrap:wrap;gap:8px 16px;font-weight:650}
@@ -448,6 +565,23 @@ body.cloud-reader input[data-act],
 body.cloud-reader textarea[data-act]{pointer-events:none;opacity:.65}
 
 /* ==================== АДАПТАЦИЯ ==================== */
+@media (max-width:559px){
+  .bw{min-width:calc(64px + var(--bwcols,6)*106px)}
+  .bw .pcol{width:64px;padding:10px 7px}
+  .bw .pcol b{font-size:17px}
+  .bw .pcol small{font-size:11px}
+  .bw td{height:151px}
+  .bw td .we{padding:8px}
+  .bw td .we b{font-size:13px}
+  .bw td .we .meta{font-size:11px}
+  .bw td .we .meta .k{font-size:9px}
+  .bw td .we .meta .t2{display:none}
+  .bw thead th{padding:8px 9px}
+  .bw thead th b{font-size:13px}
+  .bwside{justify-content:flex-start}
+  .legend{gap:5px 14px}
+  .legend li{font-size:11px}
+}
 @media (max-width:767px){
   .hero{grid-template-columns:1fr 1fr}
   .hero>div:first-child strong{font-size:46px}
@@ -465,7 +599,6 @@ body.cloud-reader textarea[data-act]{pointer-events:none;opacity:.65}
   .grid2{grid-template-columns:minmax(0,1fr)}
   .marks{flex-wrap:wrap}
   .row>.btn{flex-basis:100%}
-  .bgtu-week{grid-template-columns:1fr}
   .hero{grid-template-columns:1fr}
   .hero>div+div{border-left:0;padding-left:0;border-top:1px solid rgba(127,127,127,.35);margin-top:12px;padding-top:12px}
 }
