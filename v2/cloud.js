@@ -58,10 +58,17 @@
     if(sessionToken!==token||requestEpoch!==sessionEpoch)throw new Error('Сессия изменена');
     if(!response.ok){const error=new Error(data.error||'Ошибка сервера');error.status=response.status;throw error;}return data;
   }
+  const hasBgtu=list=>(list||[]).some(t=>t&&t.source==='bgtu');
+  /* Строки БГТУ живут в шаблоне недели и не входят в облачный журнал: без них
+     таблица исчезала бы у старосты после загрузки состояния из облака. */
+  function keepBgtu(next,prev){
+    if(hasBgtu(prev&&prev.tpl)&&!hasBgtu(next.tpl))next.tpl=[...(next.tpl||[]),...prev.tpl.filter(t=>t&&t.source==='bgtu')];
+    return next;
+  }
   async function pull(){
     const data=await api('/api/state');revision=data.revision;
     usePublicSchedule=data.usePublicSchedule!==false;
-    S=data.data?Object.assign(fresh(),data.data):fresh();dirty=false;conflict=false;ready=true;
+    S=keepBgtu(data.data?Object.assign(fresh(),data.data):fresh(),S);dirty=false;conflict=false;ready=true;
     status(data.data?'Загружено из облака · редактирование разрешено':'Облако пустое · добавь группу или перенеси данные устройства');
     permissions();render();await loadScheduleSnapshot();
   }
@@ -106,7 +113,7 @@
         if(epoch!==sessionEpoch||!ready||dirty||writing||conflict||window.modalPending||document.activeElement?.matches('input,textarea,select')||revision!==requestedRevision||edits!==editVersion)return;
         if(data.revision!==revision){
           revision=data.revision;usePublicSchedule=data.usePublicSchedule!==false;
-          S=Object.assign(fresh(),data.data||{});render();
+          S=keepBgtu(Object.assign(fresh(),data.data||{}),S);render();
         }
         status('Данные актуальны');
       }catch{

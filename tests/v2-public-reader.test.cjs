@@ -39,13 +39,15 @@ test('shell ships an empty nav container for dynamic role-aware tabs',()=>{
  assert.ok(!/data-tab="works"/.test(html),'статические вкладки удалены из HTML');
 });
 const bgtuFn=source.slice(source.indexOf('function viewBGTU(){'),source.indexOf('function viewDir(){'));
-function bgtu(editable){
+function bgtu(editable,options={}){
+  const {tpls=[{dow:2,pair:1,time:'08:00 - 09:35',subjectId:'p1',teacherId:'t1',room:'231'}],blocked=false,loading=false}={...options};
   const c=vm.createContext({ctx:{},S:{group:TEST_GROUP,schedule:{group:TEST_GROUP,week:'odd',fetchedAt:'2026-09-15T08:00:00Z'}},
-   head:()=>'',esc:String,bgtuTpls:w=>[{dow:2,pair:1,time:'08:00 - 09:35',subjectId:'p1',teacherId:'t1',room:'231'}],
+   head:()=>'',esc:String,bgtuTpls:w=>tpls,scheduleLoading:loading,
    DOW:['вс','пн','вт','ср','чт','пт','сб'],subjName:()=>'Алгебра',formatTeacherName:x=>x,teachName:()=>'',
    dowOf:()=>2,
    todayISO:()=>'2026-09-15',bgtuCurrentWeekForDate:()=>'odd',bgtuWeekLabel:w=>w,bgtuWeekGenitive:w=>w,Date});
-  c.window={cloudCanEdit:()=>editable};vm.runInContext(bgtuFn,c);return c.viewBGTU();
+  c.window={cloudCanEdit:()=>editable,cloudScheduleBlocked:()=>blocked};
+  vm.runInContext(bgtuFn,c);return c.viewBGTU();
 }
 test('public BGTU schedule shows both weeks in one table and keeps refresh',()=>{
   const html=bgtu(false);
@@ -61,6 +63,29 @@ test('editor BGTU schedule exposes refresh, locked parameters and the week table
   for(const text of ['Обновлено:','Параметры зафиксированы','<table class="bw"'])assert.ok(html.includes(text),text);
 });
 
+test('BGTU screen explains an empty schedule instead of staying blank',()=>{
+  for(const editable of [false,true]){
+    const html=bgtu(editable,{tpls:[]});
+    assert.ok(!html.includes('<table class="bw"'),'таблицы без данных нет');
+    assert.ok(html.includes('Нажми «Обновить расписание» выше'),'подсказка без пар');
+    assert.ok(html.includes('openbgtu'),'ссылка на сайт остаётся');
+  }
+  assert.ok(bgtu(false,{tpls:[],loading:true}).includes('Загружаю расписание'),'во время загрузки');
+  assert.ok(bgtu(true,{tpls:[],blocked:true}).includes('отключено'),'у старой сессии с отключённым расписанием');
+});
+test('cloud state keeps the BGTU week template the journal does not store',()=>{
+  const cloud=fs.readFileSync(path.join(root,'cloud.js'),'utf8');
+  const fn=cloud.slice(cloud.indexOf('const hasBgtu='),cloud.indexOf('async function pull()'));
+  const c=vm.createContext({});
+  vm.runInContext(fn+';globalThis.keepBgtu=keepBgtu;',c);
+  const rows=[{source:'bgtu',dow:1,pair:1},{source:'bgtu',dow:2,pair:2}];
+  const merged=c.keepBgtu({tpl:[{id:'x1',source:'manual'}]},{tpl:[{id:'x0',source:'manual'},...rows]});
+  assert.equal(merged.tpl.filter(t=>t.source==='bgtu').length,2,'строки БГТУ перенесены');
+  assert.equal(merged.tpl.length,3,'свои строки не потеряны');
+  const own=c.keepBgtu({tpl:[...rows]},{tpl:[{source:'bgtu',dow:9,pair:9}]});
+  assert.equal(own.tpl.length,2,'облачные строки не дублируются');
+});
+
 /* Настоящий код таблицы БГТУ целиком: нормализация данных, строки, окна. */
 const weekFn=source.slice(source.indexOf('function bgtuWeekLabel(w){'),source.indexOf('function viewDir(){'));
 const T=(week,dow,pair,extra={})=>({source:'bgtu',week,dow,pair,time:'08:00 - 09:35',subjectId:'p1',room:'231',...extra});
@@ -68,8 +93,8 @@ function sched(tpl){
   const c=vm.createContext({ctx:{},S:{group:TEST_GROUP,tpl,schedule:{group:TEST_GROUP,week:'even',
       currentWeek:'even',weekAnchor:'2026-09-14',fetchedAt:'2026-09-15T08:00:00Z'}},
     head:()=>'',esc:String,subjName:id=>'Предмет '+id,formatTeacherName:x=>x,teachName:id=>'Иванов И. И.',
-    dowOf:()=>3,todayISO:()=>'2026-09-15',Date,Math,Set});
-  c.window={cloudCanEdit:()=>false};c.view='bgtu';
+    dowOf:()=>3,todayISO:()=>'2026-09-15',scheduleLoading:false,Date,Math,Set});
+  c.window={cloudCanEdit:()=>false,cloudScheduleBlocked:()=>false};c.view='bgtu';
   vm.runInContext(weekFn,c);
   return c.viewBGTU();
 }
