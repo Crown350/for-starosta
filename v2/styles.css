@@ -438,20 +438,21 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 /* Колонки фиксированной ширины: на десктопе таблица занимает всю ширину и не прокручивается,
    на телефоне — свайп вбок. */
 @media (min-width:900px){ body[data-screen=bgtu] .wrap{max-width:1140px} }
-/* Полоски — фон самой рамки, а не tbody: полотно одно на всю таблицу, поэтому
-   диагонали идут единой лентой через любые пустые места, включая свёрнутые строки. */
+/* Полоски — заполнение самой таблицы, а не фон рамки: полотно одно на всю
+   таблицу, поэтому диагонали идут единой лентой через любые пустые места,
+   включая свёрнутые строки. И едет вместе с ячейками при свайпе: фон рамки
+   остался бы на месте, а заполнение уехало бы с содержимым. */
 /* Отступа снизу нет: нижняя граница последней строки совпадает с нижней границей
    рамки, иначе под таблицей остаётся пустая полоса. */
 .bwscroll{min-width:0;max-width:100%;width:fit-content;overflow-x:auto;-webkit-overflow-scrolling:touch;
   margin:10px auto 0;border:1px solid var(--line);border-radius:var(--r-lg);
-  background:repeating-linear-gradient(135deg,var(--surface-2) 0 6px,var(--surface) 6px 12px);
   box-shadow:var(--shadow-sm)}
-.bwscroll table{background:none}
 /* Ширина зависит от числа столбцов: под них считается минимальная, иначе
    при трёх днях таблица прокручивалась бы вбок, а столбец не может стать
    шире 300 px — иначе при двух днях карточки растягиваются на всю страницу. */
 .bw{table-layout:fixed;width:100%;max-width:calc(84px + var(--bwcols,6)*300px);margin:0 auto;
-  min-width:calc(84px + var(--bwcols,6)*124px);border-collapse:separate;border-spacing:0}
+  min-width:calc(84px + var(--bwcols,6)*124px);border-collapse:separate;border-spacing:0;
+  background:repeating-linear-gradient(135deg,var(--surface-2) 0 6px,var(--surface) 6px 12px)}
 .bw th,.bw td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);vertical-align:top}
 .bw th:last-child,.bw td:last-child{border-right:0}
 /* Нижнюю границу последней строки замыкает рамка контейнера. */
