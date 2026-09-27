@@ -7,7 +7,7 @@ test('login dialog waits for journal read and keeps read errors visible',async()
     let resolve,reject;const loaded=new Promise((a,b)=>{resolve=a;reject=b;});
     const els={'cloud-login':{},'cloud-key':{value:'test',focus(){}},'cloud-error':{hidden:true}};
     const dlg={open:true,setAttribute(){},removeAttribute(){},close(){this.open=false;}};
-    const c=vm.createContext({document:{getElementById:id=>els[id]},dlg,sessionEpoch:0,token:'',ready:false,status(){},permissions(){},api:async()=>({}),pull:()=>loaded});
+    const c=vm.createContext({document:{getElementById:id=>els[id]},clearTimeout,timer:null,fresh:()=>({}),keepBgtu:s=>s,render(){},dlg,sessionEpoch:0,token:'',ready:false,status(){},permissions(){},api:async()=>({}),pull:()=>loaded});
     vm.runInContext(source,c);const pending=els['cloud-login'].onsubmit({preventDefault(){}});
     await Promise.resolve();await Promise.resolve();assert.equal(dlg.open,true,'dialog remains open while reading');
     if(failed)reject(Error('Нет соединения'));else resolve();await pending;
