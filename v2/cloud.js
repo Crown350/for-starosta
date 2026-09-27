@@ -58,10 +58,14 @@
     if(sessionToken!==token||requestEpoch!==sessionEpoch)throw new Error('Сессия изменена');
     if(!response.ok){const error=new Error(data.error||'Ошибка сервера');error.status=response.status;throw error;}return data;
   }
+  // Restore only the validated public snapshot, with IDs rebuilt for this journal.
+  function keepBgtu(next){
+    return usePublicSchedule ? (window.restorePublicBGTU?.(next)||next) : next;
+  }
   async function pull(){
     const data=await api('/api/state');revision=data.revision;
     usePublicSchedule=data.usePublicSchedule!==false;
-    S=data.data?Object.assign(fresh(),data.data):fresh();dirty=false;conflict=false;ready=true;
+    S=keepBgtu(data.data?Object.assign(fresh(),data.data):fresh());dirty=false;conflict=false;ready=true;
     status(data.data?'Загружено из облака · редактирование разрешено':'Облако пустое · добавь группу или перенеси данные устройства');
     permissions();render();await loadScheduleSnapshot();
   }
@@ -80,20 +84,22 @@
   };
   window.cloudInit=async()=>{localBackup=JSON.parse(JSON.stringify(S));offline.checked=await localCopy.init();S=fresh();permissions();status('Без ключа доступно расписание БГТУ. Журнал группы откроется после входа.');loadScheduleSnapshot();};
   document.getElementById('cloud-login').onsubmit=async e=>{
-    e.preventDefault();sessionEpoch++;
+    e.preventDefault();const loginEpoch=++sessionEpoch;
+    ready=false;dirty=false;conflict=false;refreshPending=null;clearTimeout(timer);
+    S=fresh();ctx={};scheduleLoading=false;
     const keyInput=document.getElementById('cloud-key');
     token=keyInput.value.trim();keyInput.value='';status('Проверяю ключ…');
     const err=document.getElementById('cloud-error');
     dlg.setAttribute('aria-busy','true');
-    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;await pull();dlg.close('ok');}
-    catch(error){token='';ready=false;permissions();err.textContent=error.message;err.hidden=false;keyInput.focus();}
-    finally{dlg.removeAttribute('aria-busy');}
+    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;await pull();if(loginEpoch===sessionEpoch)dlg.close('ok');}
+    catch(error){if(loginEpoch!==sessionEpoch)return;token='';ready=false;usePublicSchedule=true;S=keepBgtu(fresh());permissions();render();err.textContent=error.message;err.hidden=false;keyInput.focus();}
+    finally{if(loginEpoch===sessionEpoch)dlg.removeAttribute('aria-busy');}
   };
   document.getElementById('cloud-pull').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Заменить несохранённые изменения облачной версией? Сначала можно скачать их.'))return;try{await pull();}catch(e){status(e.message);}};
   document.getElementById('cloud-push').onclick=()=>push();
   document.getElementById('cloud-draft').onclick=()=>download('starosta-draft-'+todayISO()+'.json',JSON.stringify(S),'application/json');
   document.getElementById('cloud-import').onclick=async()=>{if(!window.cloudCanEdit())return;if(!await askConfirm('Заменить общий журнал данными, сохранёнными на этом устройстве до входа?'))return;S=JSON.parse(JSON.stringify(localBackup));save();render();};
-  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;usePublicSchedule=true;sessionEpoch++;refreshPending=null;clearTimeout(timer);S=fresh();localBackup=null;view=null;ctx={};offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
+  document.getElementById('cloud-logout').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Выйти с несохранёнными изменениями? Сначала можно скачать их.'))return;token='';ready=false;dirty=false;conflict=false;usePublicSchedule=true;sessionEpoch++;refreshPending=null;clearTimeout(timer);S=keepBgtu(fresh());localBackup=null;view=null;ctx={};scheduleLoading=false;void loadScheduleSnapshot();offline.checked=false;permissions();render();try{await localCopy.logout();status('Выход выполнен · журнал и копия устройства очищены');}catch{privacyError();}};
   window.addEventListener('beforeunload',e=>{if(dirty||writing){e.preventDefault();e.returnValue='';}});
   // S is the session-only cache. Never clear it while revalidating.
   async function refreshJournal(){
@@ -106,7 +112,7 @@
         if(epoch!==sessionEpoch||!ready||dirty||writing||conflict||window.modalPending||document.activeElement?.matches('input,textarea,select')||revision!==requestedRevision||edits!==editVersion)return;
         if(data.revision!==revision){
           revision=data.revision;usePublicSchedule=data.usePublicSchedule!==false;
-          S=Object.assign(fresh(),data.data||{});render();
+          S=keepBgtu(Object.assign(fresh(),data.data||{}));render();
         }
         status('Данные актуальны');
       }catch{
