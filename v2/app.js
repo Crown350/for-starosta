@@ -856,11 +856,15 @@ function bgtuWeekTable(week){
   const cols=[...new Set(all.map(t=>t.dow))].sort((a,b)=>a-b);
   const days=cols.length?cols:[1,2,3,4,5,6];
   const maxPair=all.reduce((m,t)=>Math.max(m,t.pair),0);
-  /* Время строки — самое раннее среди всех записей этого номера пары. */
+  /* Время строки — самое раннее среди всех записей этого номера пары, и в колонке
+     показывается весь интервал: с какого по какое время пара идёт. Нечитаемое время
+     пропускаем, чтобы в углу не появилось «00:00». */
   const slotByPair={};
   all.forEach(t=>{
     if(!t.time)return;
-    const slot=bgtuSlot(t.time),cur=slotByPair[t.pair];
+    const slot=bgtuSlot(t.time);
+    if(!slot.s)return;
+    const cur=slotByPair[t.pair];
     if(!cur||slot.s<cur.s)slotByPair[t.pair]=slot;
   });
   const todayDow=dowOf(todayISO());
@@ -910,7 +914,7 @@ function bgtuWeekTable(week){
     /* Строка прямо над свёрнутым блоком отдаёт ему свою нижнюю границу. */
     const pre=rows[ri+1]&&rows[ri+1].skipped;
     h+=`<tr${pre?' class="pre"':''}><th class="pcol" scope="row"><b>${row.pair}</b>`
-      +(slot?`<small>${bgtuHm(slot.s)}</small>`:'')+`</th>`;
+      +(slot?`<small>${bgtuHm(slot.s)}<i>${bgtuHm(slot.e)}</i></small>`:'')+`</th>`;
     days.forEach((dow,di)=>{
       const o=bgtuHalfState(odd,dow,row.pair,maxPair,has);
       const e=bgtuHalfState(even,dow,row.pair,maxPair,has);

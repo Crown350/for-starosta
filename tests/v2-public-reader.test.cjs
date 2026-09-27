@@ -149,3 +149,10 @@ test('BGTU table sizes itself by the number of day columns',()=>{
   assert.ok(!html.includes('ВТ'),'пустых столбцов нет');
   assert.ok(html.includes('>1/0 н/ч</small>'),'второй день со своей подписью');
 });
+test('pair column shows the whole interval, not only the start',()=>{
+  const html=sched([T('odd',1,1,{time:'10:00 - 11:35'})]);
+  assert.ok(html.includes('<small>10:00<i>11:35</i></small>'),'начало и конец пары в одной ячейке');
+  const bad=sched([{source:'bgtu',week:'odd',dow:1,pair:1,subjectId:'p1',time:'позже'}]);
+  assert.ok(bad.includes('<b>1</b></th>'),'пара с нечитаемым временем остаётся на месте');
+  assert.ok(!/<th class=\"pcol\"[^>]*><b>1<\/b><small>/.test(bad),'нечитаемое время не превращается в 00:00');
+});

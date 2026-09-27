@@ -467,6 +467,9 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 .bw .pcol b{display:block;font-size:19px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
 .bw .pcol small{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-top:4px;
   font-variant-numeric:tabular-nums}
+/* Время окончания — вторая строка того же интервала: приглушена, чтобы диапазон
+   читался сразу, а не как два независимых значения. */
+.bw .pcol small i{display:block;font-style:normal;color:var(--ink-dim)}
 /* Левый верхний угол разделён по диагонали: «день» под заголовками дней,
    «пара» над номерами пар. Полоса идёт из левого нижнего угла в правый верхний. */
 .bw thead .pcol{z-index:4;padding:0;
