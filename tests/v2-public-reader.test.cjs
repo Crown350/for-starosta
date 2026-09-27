@@ -195,5 +195,14 @@ test('pair column shows the whole interval, not only the start',()=>{
   assert.ok(html.includes('<small>10:00<i>11:35</i></small>'),'начало и конец пары в одной ячейке');
   const bad=sched([{source:'bgtu',week:'odd',dow:1,pair:1,subjectId:'p1',time:'позже'}]);
   assert.ok(bad.includes('<b>1</b></th>'),'пара с нечитаемым временем остаётся на месте');
-  assert.ok(!/<th class=\"pcol\"[^>]*><b>1<\/b><small>/.test(bad),'нечитаемое время не превращается в 00:00');
+  assert.ok(!/<th class="pcol"[^>]*><b>1<\/b><small>/.test(bad),'нечитаемое время не превращается в 00:00');
+});
+test('teacher gets its own line and never shares it with the kind and the room',()=>{
+  const one=sched([T('odd',1,1,{teacherId:'t1'})]);
+  assert.ok(one.includes('<span class="t2">Иванов</span>'),'преподаватель стоит отдельной строкой');
+  const meta=/<small class="meta">([\s\S]*?)<\/small>/.exec(one)[1];
+  assert.ok(!meta.includes('Иванов'),'в строке вида занятия и аудитории преподавателя нет');
+  const both=sched([T('odd',1,1,{teacherId:'t1'}),T('even',1,1,{teacherId:'t1'})]);
+  assert.ok(both.includes('we both'),'одинаковая пара обеих недель остаётся одной клеткой');
+  assert.ok(both.includes('<span class="t2">Иванов</span>'),'в общей клетке преподаватель тоже виден');
 });

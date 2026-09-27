@@ -870,7 +870,7 @@ function bgtuHalfState(list,dow,pair,maxPair,has){
   if(to<=from)return{kind:'free'};
   return{kind:'win',from,to,first:pair===prev+1};
 }
-function bgtuHalf(part,compact,cur){
+function bgtuHalf(part,cur){
   const tag=part.tag;
   /* Половинка той недели, которая сейчас не идёт, помечается off - её приглушают. */
   const off=(tag==='both'||tag===cur)?'':' off';
@@ -879,12 +879,16 @@ function bgtuHalf(part,compact,cur){
       +`<b>${bgtuHm(part.from)}–${bgtuHm(part.to)}</b></div>`;
   }
   const row=part.row;
-  const who=compact?'':' · '+bgtuTeacherShort(row.teacherId);
+  /* Преподаватель — отдельной строкой и всегда: раньше он делил строку с видом
+     и аудиторией, из-за чего уезжал в многоточие, а в неделях-«двойниках»
+     (одна и та же пара обе недели) не показывался вовсе. */
+  const who=bgtuTeacherShort(row.teacherId);
   const kind=bgtuKindLabel(row.kind);
   return `<div class="we${tag==='both'?' both':(tag==='even'?' alt':'')}${off}">`
     +`<b>${esc(bgtuShortName(row.subjectId))}</b>`
+    +(who?`<span class="t2">${esc(who)}</span>`:'')
     +`<small class="meta">${kind?`<span class="k">${esc(kind)}</span>`:''}`
-    +(row.room?`<span class="r">${esc(row.room)}</span>`:'')+(who?`<span class="t2">${esc(who)}</span>`:'')+`</small>`
+    +(row.room?`<span class="r">${esc(row.room)}</span>`:'')+`</small>`
     +`</div>`;
 }
 function bgtuWeekTable(week){
@@ -977,7 +981,7 @@ function bgtuWeekTable(week){
         if(prevOcc&&!prevOcc[di])cls.push('et');
       }
       h+=`<td class="${cls.join(' ')}"><div class="wc">`
-        +parts.map(p=>bgtuHalf(p,parts.length===1,week)).join('')
+        +parts.map(p=>bgtuHalf(p,week)).join('')
         +`</div></td>`;
     });
     prevOcc=occ;
