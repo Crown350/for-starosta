@@ -515,7 +515,7 @@ async function loadCurriculum(){
 }
 function viewSemester(){
   const n=control=>curriculum.filter(r=>r.control===control).length;
-  let h=head('Семестр','1 курс · '+S.schedule.semester+' семестр · '+S.group)+'</header>';
+  let h=head('Семестр','1 курс · '+esc(S.schedule.semester)+' семестр · '+esc(S.group))+'</header>';
   if(curriculumPending)return h+'<div class="card"><p class="hint" role="status">Рабочая программа загружается…</p></div>';
   if(curriculumError||!curriculum.length)return h+'<div class="card"><p class="hint" role="status">'+esc(curriculumError||'Рабочая программа пуста, показать нечего.')+'</p></div>';
   h+='<div class="card semester-summary"><span>'+plural(n('Экзамен'),'экзамен','экзамена','экзаменов')+'</span><span>'+plural(n('Зачёт')+n('ЗачётСОценкой'),'зачёт','зачёта','зачётов')+'</span><span>'+curriculum.filter(r=>r.extra).length+' курсовых</span><span>'+curriculum.reduce((s,r)=>s+r.ze,0)+' з.е.</span></div><p class="hint">По дисциплинам, подтверждённым расписанием. Часы: лекции / лабораторные / практические.</p><ul class="grouplist">';

@@ -258,4 +258,19 @@ test('semester tab says what happened instead of loading forever',async()=>{
     assert.ok(!bad.shown.includes('загружается'),mode+': экран не обещает загрузку вечно');
   }
 });
+test('semester header keeps the group and semester as data, not markup',()=>{
+  const semesterFn=source.slice(source.indexOf('let curriculumPending=true'),source.indexOf('function viewMore(){'));
+  const c=vm.createContext({curriculum:[],curriculumPending:false,curriculumError:'',tab:'semester',view:null,plural:(n,a)=>n+' '+a,
+    S:{group:'"><img src=x onerror=alert(1)>',schedule:{semester:'<b>1</b>'}}});
+  vm.runInContext(source.slice(source.indexOf('function esc('),source.indexOf('function todayISO('))
+    +source.slice(source.indexOf('function head('),source.indexOf('/* ---------- СЕГОДНЯ'))+semesterFn,c);
+  const html=c.viewSemester();
+  for(const tag of html.match(/<[^>]*>/g)||[]){
+    const markup=tag.replace(/"[^"]*"|'[^']*'/g,'""');
+    assert.doesNotMatch(markup,/\s(?:on\w+|autofocus)\s*(?:=|>)/i);
+  }
+  assert.doesNotMatch(html,/<(?:img|b)\b/i);
+  assert.ok(html.includes('&quot;&gt;&lt;img src=x onerror=alert(1)&gt;'),'группа из снимка остаётся данными');
+  assert.ok(html.includes('&lt;b&gt;1&lt;/b&gt;'),'семестр из состояния остаётся данными');
+});
 
