@@ -119,7 +119,7 @@ const NAV_TABS={
   reader:[
     {id:'pairs',label:'Сегодня',icon:NAV_SVGS.pairs},
     {id:'schedule',label:'Расписание',icon:NAV_SVGS.schedule},
-    {id:'semester',label:'Семестр',icon:NAV_SVGS.semester,when:()=>typeof curriculum!=='undefined'&&curriculum.length},
+    {id:'semester',label:'Семестр',icon:NAV_SVGS.semester},
     {id:'more',label:'Ещё',icon:NAV_SVGS.more},
   ],
   editor:[
@@ -175,7 +175,6 @@ function fundDebt(sid){
 /* ============================ РЕНДЕР ============================ */
 let curriculum=[];
 function render(){
-  if(tab==='semester'&&!(typeof curriculum!=='undefined'&&curriculum.length))tab='pairs';
   renderNav();
   const app=$('app');
   const screen=(view==='bgtu'||(view==null&&tab==='schedule'))?'bgtu':(view||tab);
@@ -508,12 +507,12 @@ async function loadCurriculum(){
 function viewSemester(){
   const n=control=>curriculum.filter(r=>r.control===control).length;
   let h=head('Семестр','1 курс · '+S.schedule.semester+' семестр · '+S.group)+'</header>';
+  if(!curriculum.length)return h+'<div class="card"><p class="hint">Рабочая программа ещё загружается.</p></div>';
   h+='<div class="card semester-summary"><span>'+plural(n('Экзамен'),'экзамен','экзамена','экзаменов')+'</span><span>'+plural(n('Зачёт')+n('ЗачётСОценкой'),'зачёт','зачёта','зачётов')+'</span><span>'+curriculum.filter(r=>r.extra).length+' курсовых</span><span>'+curriculum.reduce((s,r)=>s+r.ze,0)+' з.е.</span></div><p class="hint">По дисциплинам, подтверждённым расписанием. Часы: лекции / лабораторные / практические.</p><ul class="grouplist">';
   for(const r of curriculum)h+='<li><div><div class="grp">'+esc(r.code)+' · '+r.ze+' з.е.</div><div class="fio"><b>'+esc(r.name)+'</b></div><div class="chips"><span class="chip '+(r.control==='Экзамен'?'semester-exam':r.control==='ЗачётСОценкой'?'warn':'ok')+'">'+(r.control==='ЗачётСОценкой'?'Зачёт с оценкой':esc(r.control))+'</span>'+(r.extra?'<span class="chip warn">'+esc(r.extra)+'</span>':'')+'</div><p class="hint">Лек: '+r.lek+' · Лаб: '+r.lab+' · Пр: '+r.pr+' ч.<br>Кафедра '+esc(r.kafedra)+'</p></div></li>';
   return h+'</ul>';
 }
 function viewMore(){
-  const hasSemester=typeof curriculum!=='undefined'&&curriculum.length;
   const guest=!window.cloudHasSession?.();
   const editor=window.cloudCanEdit?.();
   return head('Ещё') + `</header>
@@ -530,7 +529,7 @@ function viewMore(){
         <span>${S.tpl.length} пар в шаблоне</span></span><span class="go" aria-hidden="true">›</span></button></li>
       ${editor?`<li><button class="lesson" type="button" data-act="gobgtu"><span class="t"><b>Расписание БГТУ</b>
         <span>${esc((S.schedule&&S.schedule.group)||S.group||'Группа')} · ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя</span></span><span class="go" aria-hidden="true">›</span></button></li>`:''}
-      ${(editor||!hasSemester)?`<li><button class="lesson" type="button" data-act="gosemester"><span class="t"><b>Семестр</b>
+      ${editor?`<li><button class="lesson" type="button" data-act="gosemester"><span class="t"><b>Семестр</b>
         <span>учебный план: предметы, контроль, часы</span></span><span class="go" aria-hidden="true">›</span></button></li>`:''}
     </ul>
     ${window.cloudHasSession?.()?`<h2>Выгрузка</h2>
@@ -1500,6 +1499,7 @@ document.addEventListener('focusout', ()=>setTimeout(measure,120));
 
 /* ============================ СТАРТ ============================ */
 async function startApp(){
+  renderNav();   /* таб-бар рисуется первым кадром и не меняет состав, пока грузятся данные */
   void loadCurriculum();
   void loadTeachers();
   const raw = await store.get(KEY);
