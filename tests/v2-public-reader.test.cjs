@@ -206,3 +206,56 @@ test('teacher gets its own line and never shares it with the kind and the room',
   assert.ok(both.includes('we both'),'одинаковая пара обеих недель остаётся одной клеткой');
   assert.ok(both.includes('<span class="t2">Иванов</span>'),'в общей клетке преподаватель тоже виден');
 });
+test('BGTU table keeps every parallel lesson of the same pair number',()=>{
+  const html=sched([T('odd',1,1,{subjectId:'p1',room:'201'}),T('odd',1,1,{subjectId:'p2',room:'202'})]);
+  for(const id of ['p1','p2'])assert.ok(html.includes('Предмет '+id),'видна подгруппа '+id);
+  for(const room of ['201','202'])assert.ok(html.includes(room),'видна аудитория '+room);
+  assert.equal(/class="wl"/g.test(html),true,'занятия нарисованы отдельными блоками');
+  assert.ok(html.includes('1/0 н/ч'),'счётчик в шапке считает номера пар, а не записи');
+  assert.ok(html.includes('разные<br>времена')||html.includes('<small>08:00<i>'),'время строки не выдаётся за общее');
+});
+test('BGTU table names parallel subgroups apart',()=>{
+  const c=vm.createContext({esc:String,subjName:id=>id==='p1'?'Математика (1 подгруппа)':'Математика (2 подгруппа)'});
+  vm.runInContext(source.slice(source.indexOf('const BGTU_DOW_S='),source.indexOf('function bgtuTeacherShort(id){')),c);
+  assert.equal(c.bgtuShortName('p1',true),'Математика (1 подгруппа)','скобка с подгруппой сохранена');
+  assert.equal(c.bgtuShortName('p1',false),'Математика','одиночная пара теряет скобку');
+});
+test('BGTU table keeps a window whose pair number would be collapsed',()=>{
+  const html=sched([T('odd',1,1,{time:'08:00 - 09:35'}),T('odd',1,3,{time:'12:00 - 13:35'})]);
+  assert.ok(html.includes('we win'),'окно между парами показано');
+  assert.ok(html.includes('09:35–12:00'),'границы окна верны');
+  assert.ok(!html.includes('пар нет'),'номер пары не схлопнут в строку «пар нет»');
+  const junk=sched([T('odd',1,1,{time:'позже'}),T('odd',1,3,{time:'12:00 - 13:35'})]);
+  assert.ok(!junk.includes('we win'),'нечитаемое время границы окна не выдумывает');
+  assert.ok(!/<th class="pcol"[^>]*><b>[13]<\/b><small>00:00/.test(junk),'в углу не появилось 00:00');
+});
+test('semester tab says what happened instead of loading forever',async()=>{
+  const semesterFn=source.slice(source.indexOf('let curriculumPending=true'),source.indexOf('function viewMore(){'));
+  const rows=[{name:'Математика',code:'Б1.О.01',control:'Экзамен',extra:null,lek:36,lab:0,pr:18,ze:5,kafedra:'КТ'}];
+  async function semester(mode){
+    let renders=0;
+    const c=vm.createContext({curriculum:[],curriculumPending:true,curriculumError:'',tab:'semester',view:null,
+      S:{group:TEST_GROUP,schedule:{semester:1}},esc:String,plural:(n,a)=>n+' '+a,head:t=>t,
+      render:()=>renders++,
+      fetch:async()=>{
+        if(mode==='offline')throw new Error('offline');
+        if(mode==='invalid')return {ok:true,status:200,json:async()=>[]};
+        return {ok:true,status:200,json:async()=>rows};
+      }});
+    vm.runInContext(semesterFn,c);
+    const waiting=c.viewSemester();
+    await c.loadCurriculum();
+    return {waiting,shown:c.viewSemester(),renders};
+  }
+  const ok=await semester('ok');
+  assert.ok(ok.waiting.includes('загружается'),'до загрузки вкладка честно ждёт');
+  assert.ok(ok.shown.includes('Математика'),'после загрузки видна программа');
+  assert.ok(!ok.shown.includes('загружается'),'сообщение о загрузке уходит');
+  assert.equal(ok.renders,1,'открытый экран перерисовывается, а не ждёт действия');
+  for(const mode of ['offline','invalid']){
+    const bad=await semester(mode);
+    assert.ok(bad.shown.includes('не загрузилась'),mode+': сказано, что не вышло');
+    assert.ok(!bad.shown.includes('загружается'),mode+': экран не обещает загрузку вечно');
+  }
+});
+

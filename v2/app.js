@@ -495,19 +495,29 @@ function viewStudent(){
 }
 
 /* ---------- ЕЩЁ ---------- */
+/* Программа приезжает отдельным файлом: пока её нет — вкладка честно говорит, что
+   грузится, а после неудачи — что не вышло. Иначе экран навсегда обещает загрузку. */
+let curriculumPending=true, curriculumError='';
 async function loadCurriculum(){
   try{
     const response=await fetch('../data/curriculum.json',{cache:'no-store'});
-    if(!response.ok || response.status===204)return;
+    if(!response.ok || response.status===204)throw new Error('empty');
     const rows=await response.json();
-    if(!Array.isArray(rows)||!rows.length||!rows.every(r=>r&&typeof r.name==='string'&&typeof r.code==='string'&&['Экзамен','Зачёт','ЗачётСОценкой'].includes(r.control)&&[null,'КП','КР'].includes(r.extra)&&['lek','lab','pr','ze'].every(k=>Number.isFinite(r[k])&&r[k]>=0)))return;
-    curriculum=rows;const st=$('semester-tab');if(st)st.hidden=false;measureSoon();
-  }catch{} // Optional static data: no unhandled errors, tab remains hidden.
+    if(!Array.isArray(rows)||!rows.length||!rows.every(r=>r&&typeof r.name==='string'&&typeof r.code==='string'&&['Экзамен','Зачёт','ЗачётСОценкой'].includes(r.control)&&[null,'КП','КР'].includes(r.extra)&&['lek','lab','pr','ze'].every(k=>Number.isFinite(r[k])&&r[k]>=0)))throw new Error('invalid');
+    curriculum=rows;
+  }catch{
+    curriculumError='Рабочая программа не загрузилась: проверь соединение и обнови страницу.';
+  }finally{
+    curriculumPending=false;
+    /* Вкладка в таб-баре есть всегда, поэтому уже открытый экран перерисовываем. */
+    if(view==null&&tab==='semester')render();
+  }
 }
 function viewSemester(){
   const n=control=>curriculum.filter(r=>r.control===control).length;
   let h=head('Семестр','1 курс · '+S.schedule.semester+' семестр · '+S.group)+'</header>';
-  if(!curriculum.length)return h+'<div class="card"><p class="hint">Рабочая программа ещё загружается.</p></div>';
+  if(curriculumPending)return h+'<div class="card"><p class="hint" role="status">Рабочая программа загружается…</p></div>';
+  if(curriculumError||!curriculum.length)return h+'<div class="card"><p class="hint" role="status">'+esc(curriculumError||'Рабочая программа пуста, показать нечего.')+'</p></div>';
   h+='<div class="card semester-summary"><span>'+plural(n('Экзамен'),'экзамен','экзамена','экзаменов')+'</span><span>'+plural(n('Зачёт')+n('ЗачётСОценкой'),'зачёт','зачёта','зачётов')+'</span><span>'+curriculum.filter(r=>r.extra).length+' курсовых</span><span>'+curriculum.reduce((s,r)=>s+r.ze,0)+' з.е.</span></div><p class="hint">По дисциплинам, подтверждённым расписанием. Часы: лекции / лабораторные / практические.</p><ul class="grouplist">';
   for(const r of curriculum)h+='<li><div><div class="grp">'+esc(r.code)+' · '+r.ze+' з.е.</div><div class="fio"><b>'+esc(r.name)+'</b></div><div class="chips"><span class="chip '+(r.control==='Экзамен'?'semester-exam':r.control==='ЗачётСОценкой'?'warn':'ok')+'">'+(r.control==='ЗачётСОценкой'?'Зачёт с оценкой':esc(r.control))+'</span>'+(r.extra?'<span class="chip warn">'+esc(r.extra)+'</span>':'')+'</div><p class="hint">Лек: '+r.lek+' · Лаб: '+r.lab+' · Пр: '+r.pr+' ч.<br>Кафедра '+esc(r.kafedra)+'</p></div></li>';
   return h+'</ul>';
@@ -577,9 +587,6 @@ function bgtuTpls(week){
     .map(t=>({...t,dow:+t.dow,pair:+t.pair}))
     .filter(t=>Number.isInteger(t.dow)&&t.dow>=1&&t.dow<=7&&Number.isInteger(t.pair)&&t.pair>=1&&t.pair<=24);
 }
-/* Ключ пары: одинаковые по названию строки из разных подгрупп — разные занятия,
-   а отличаться временем или аудиторией они не могут. */
-function bgtuLessonKey(row){ return JSON.stringify(['subjectId','pair','time','kind','room','teacherId','subgroup'].map(k=>String(row?.[k]??''))); }
 function bgtuCurrentWeekForDate(iso){
   const anchor=S.schedule?.weekAnchor || todayISO();
   const monday=d=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7));return t.getTime();};
@@ -828,8 +835,9 @@ const BGTU_SHORT={
   'физическая культура и спорт':'Физкультура',
   'технологии личностно-профессионального развития':'Технологии ЛПР'
 };
-function bgtuShortName(id){
-  const name=String(subjName(id)||'').trim().replace(/\s*\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();
+function bgtuShortName(id,keepGroup){
+  const raw=String(subjName(id)||'').trim();
+  const name=(keepGroup?raw:raw.replace(/\s*\([^)]*\)/g,' ')).replace(/\s+/g,' ').trim();
   const known=BGTU_SHORT[name.toLowerCase()];
   if(known)return known;
   if(name.length<=44)return name;
@@ -849,26 +857,39 @@ function bgtuKindLabel(kind){
   const k=String(kind||'').trim().toLowerCase();
   return BGTU_KIND[k]||(/^[а-яё]{3,12}$/i.test(k)?k:'');
 }
-const atPair=(list,dow,pair)=>list.find(t=>t.dow===dow&&t.pair===pair)||null;
+/* Ключ пары: одинаковые по названию строки из разных подгрупп — разные занятия,
+   а отличаться временем или аудиторией они не могут. */
+function bgtuLessonKey(row){ return JSON.stringify(['subjectId','pair','time','kind','room','teacherId','subgroup'].map(k=>String(row?.[k]??''))); }
+/* Все занятия этого номера пары: параллельные подгруппы в один номер попадают все,
+   иначе в таблице осталась бы одна из них. Порядок задаёт ключ строки, а не данные. */
+const atPair=(list,dow,pair)=>[...new Map(list.filter(t=>t.dow===dow&&t.pair===pair)
+  .map(t=>[bgtuLessonKey(t),t])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([,row])=>row);
 /* Совпадают ли две записи полностью — тогда клетка не делится пополам. */
 function bgtuSameLesson(a,b){
-  return !!a&&!!b&&a.subjectId===b.subjectId&&a.pair===b.pair
-    &&String(a.time||'')===String(b.time||'')&&String(a.kind||'')===String(b.kind||'')
-    &&String(a.room||'')===String(b.room||'')&&String(a.teacherId||'')===String(b.teacherId||'');
+  return a.length===b.length&&a.every((row,i)=>bgtuLessonKey(row)===bgtuLessonKey(b[i]));
 }
-/* Состояние половинки клетки для одной недели: занятие, окно между её парами или свободно.
-   Окно — разрыв между парами этой же недели: нужна пара и выше, и ниже. */
-function bgtuHalfState(list,dow,pair,maxPair,has){
-  const row=atPair(list,dow,pair);
-  if(row)return{kind:'class',row};
+/* Окно между парами этой недели и дня: нужна пара и выше, и ниже, а время обеих
+   границ обязано читаться, иначе границы выдуманы. */
+function bgtuWindow(list,dow,pair,maxPair,has){
   let prev=0,next=0;
   for(let p=pair-1;p>=1;p--)if(has(list,dow,p)){prev=p;break;}
   for(let p=pair+1;p<=maxPair;p++)if(has(list,dow,p)){next=p;break;}
-  if(!prev||!next)return{kind:'free'};
-  const from=bgtuSlot(atPair(list,dow,prev).time).e;
-  const to=bgtuSlot(atPair(list,dow,next).time).s;
-  if(to<=from)return{kind:'free'};
-  return{kind:'win',from,to,first:pair===prev+1};
+  if(!prev||!next)return null;
+  const before=atPair(list,dow,prev).map(r=>bgtuSlot(r.time));
+  const after=atPair(list,dow,next).map(r=>bgtuSlot(r.time));
+  if([...before,...after].some(t=>!t.s||!t.e))return null;
+  const from=Math.max(...before.map(t=>t.e));
+  const to=Math.min(...after.map(t=>t.s));
+  return to>from?{from,to,prev}:null;
+}
+/* Состояние половинки клетки для одной недели: занятия, окно между её парами или свободно.
+   Окно рисуется в первой свободной паре после предыдущей занятой, чтобы не повторяться. */
+function bgtuHalfState(list,dow,pair,maxPair,has){
+  const rows=atPair(list,dow,pair);
+  if(rows.length)return{kind:'class',rows};
+  const win=bgtuWindow(list,dow,pair,maxPair,has);
+  if(!win)return{kind:'free'};
+  return{kind:'win',from:win.from,to:win.to,first:pair===win.prev+1};
 }
 function bgtuHalf(part,cur){
   const tag=part.tag;
@@ -878,47 +899,49 @@ function bgtuHalf(part,cur){
     return `<div class="we win${tag==='even'?' alt':''}${off}"><span>окно</span>`
       +`<b>${bgtuHm(part.from)}–${bgtuHm(part.to)}</b></div>`;
   }
-  const row=part.row;
-  /* Преподаватель — отдельной строкой и всегда: раньше он делил строку с видом
-     и аудиторией, из-за чего уезжал в многоточие, а в неделях-«двойниках»
-     (одна и та же пара обе недели) не показывался вовсе. */
-  const who=bgtuTeacherShort(row.teacherId);
-  const kind=bgtuKindLabel(row.kind);
+  const rows=part.rows;
+  /* Параллельные подгруппы делят половинку поровну, и различает их название
+     вместе со скобкой: без неё две строки выглядели бы одинаково. */
+  const keepGroup=rows.length>1;
   return `<div class="we${tag==='both'?' both':(tag==='even'?' alt':'')}${off}">`
-    +`<b>${esc(bgtuShortName(row.subjectId))}</b>`
-    +(who?`<span class="t2">${esc(who)}</span>`:'')
-    +`<small class="meta">${kind?`<span class="k">${esc(kind)}</span>`:''}`
-    +(row.room?`<span class="r">${esc(row.room)}</span>`:'')+`</small>`
+    +rows.map(row=>{
+      /* Преподаватель — отдельной строкой и всегда: раньше он делил строку с видом
+         и аудиторией, из-за чего уезжал в многоточие, а в неделях-«двойниках»
+         (одна и та же пара обе недели) не показывался вовсе. */
+      const who=bgtuTeacherShort(row.teacherId);
+      const kind=bgtuKindLabel(row.kind);
+      return `<div class="wl"><b>${esc(bgtuShortName(row.subjectId,keepGroup))}</b>`
+        +(who?`<span class="t2">${esc(who)}</span>`:'')
+        +`<small class="meta">${kind?`<span class="k">${esc(kind)}</span>`:''}`
+        +(row.room?`<span class="r">${esc(row.room)}</span>`:'')+`</small></div>`;
+    }).join('')
     +`</div>`;
 }
 function bgtuWeekTable(week){
   const odd=bgtuTpls('odd'), even=bgtuTpls('even');
-  const has=(list,dow,pair)=>!!atPair(list,dow,pair);
+  const has=(list,dow,pair)=>atPair(list,dow,pair).length>0;
   const all=[...odd,...even];
   /* Столбцы — только те дни, в которые есть хоть одна пара, и всегда по порядку:
      ни количество, ни порядок записей в данных на таблицу не влияют. */
   const cols=[...new Set(all.map(t=>t.dow))].sort((a,b)=>a-b);
   const days=cols.length?cols:[1,2,3,4,5,6];
   const maxPair=all.reduce((m,t)=>Math.max(m,t.pair),0);
-  /* Время строки — самое раннее среди всех записей этого номера пары, и в колонке
-     показывается весь интервал: с какого по какое время пара идёт. Нечитаемое время
-     пропускаем, чтобы в углу не появилось «00:00». */
-  const slotByPair={};
-  all.forEach(t=>{
-    if(!t.time)return;
-    const slot=bgtuSlot(t.time);
-    if(!slot.s)return;
-    const cur=slotByPair[t.pair];
-    if(!cur||slot.s<cur.s)slotByPair[t.pair]=slot;
-  });
+  /* Время строки — единственное у этого номера пары, и в колонке показывается
+     весь интервал: с какого по какое время пара идёт. Если время разное —
+     это параллельные подгруппы, и одна цифра была бы враньём. */
+  const timesByPair={};
+  all.forEach(t=>{(timesByPair[t.pair]??=new Set()).add(String(t.time||''));});
   const todayDow=dowOf(todayISO());
 
   /* Строки таблицы: настоящие пары и одна свёрнутая строка на пропуск номеров.
-     Схлопывается любая непрерывная серия номеров без занятий — хоть 5–7, хоть одна 4-я. */
+     Схлопывается любая непрерывная серия номеров без занятий — хоть 5–7, хоть одна 4-я.
+     Номер с окном не схлопывается: разрыв во времени исчез бы вместе с ним. */
   const rows=[];
   let skipped=[];
+  const keepsPair=p=>days.some(d=>has(odd,d,p)||has(even,d,p))
+    ||days.some(d=>bgtuWindow(odd,d,p,maxPair,has)||bgtuWindow(even,d,p,maxPair,has));
   for(let p=1;p<=maxPair;p++){
-    if(days.some(d=>has(odd,d,p)||has(even,d,p))){
+    if(keepsPair(p)){
       if(skipped.length){rows.push({skipped});skipped=[];}
       rows.push({pair:p});
     }else skipped.push(p);
@@ -953,21 +976,23 @@ function bgtuWeekTable(week){
       return;
     }
     const occ=days.map(d=>has(odd,d,row.pair)||has(even,d,row.pair));
-    const slot=slotByPair[row.pair];
+    const times=timesByPair[row.pair];
+    const slot=times&&times.size===1?bgtuSlot([...times][0]):null;
     /* Строка прямо над свёрнутым блоком отдаёт ему свою нижнюю границу. */
     const pre=rows[ri+1]&&rows[ri+1].skipped;
     h+=`<tr${pre?' class="pre"':''}><th class="pcol" scope="row"><b>${row.pair}</b>`
-      +(slot?`<small>${bgtuHm(slot.s)}<i>${bgtuHm(slot.e)}</i></small>`:'')+`</th>`;
+      +(slot&&slot.s?`<small>${bgtuHm(slot.s)}<i>${bgtuHm(slot.e)}</i></small>`
+        :times&&times.size>1?'<small>разные<br>времена</small>':'')+`</th>`;
     days.forEach((dow,di)=>{
       const o=bgtuHalfState(odd,dow,row.pair,maxPair,has);
       const e=bgtuHalfState(even,dow,row.pair,maxPair,has);
       let parts=[];
-      if(o.kind==='class'&&e.kind==='class'&&bgtuSameLesson(o.row,e.row)){
-        parts=[{tag:'both',kind:'class',row:o.row}];
+      if(o.kind==='class'&&e.kind==='class'&&bgtuSameLesson(o.rows,e.rows)){
+        parts=[{tag:'both',kind:'class',rows:o.rows}];
       }else{
-        if(o.kind==='class')parts.push({tag:'odd',kind:'class',row:o.row});
+        if(o.kind==='class')parts.push({tag:'odd',kind:'class',rows:o.rows});
         else if(o.kind==='win'&&o.first)parts.push({tag:'odd',kind:'win',from:o.from,to:o.to});
-        if(e.kind==='class')parts.push({tag:'even',kind:'class',row:e.row});
+        if(e.kind==='class')parts.push({tag:'even',kind:'class',rows:e.rows});
         else if(e.kind==='win'&&e.first)parts.push({tag:'even',kind:'win',from:e.from,to:e.to});
       }
       /* Сетка идёт только по занятым ячейкам. Справа и снизу линию рисует сама ячейка,
