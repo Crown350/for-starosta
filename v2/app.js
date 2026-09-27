@@ -528,7 +528,7 @@ function viewMore(){
       <li><button class="lesson" type="button" data-act="gotpl"><span class="t"><b>Шаблон недели</b>
         <span>${S.tpl.length} пар в шаблоне</span></span><span class="go" aria-hidden="true">›</span></button></li>
       ${editor?`<li><button class="lesson" type="button" data-act="gobgtu"><span class="t"><b>Расписание БГТУ</b>
-        <span>${esc((S.schedule&&S.schedule.group)||S.group||'Группа')} · ${(S.schedule&&S.schedule.week==='even')?'чётная':'нечётная'} неделя</span></span><span class="go" aria-hidden="true">›</span></button></li>`:''}
+        <span>${esc((S.schedule&&S.schedule.group)||S.group||'Группа')} · ${bgtuWeekLabel(bgtuCurrentWeekForDate(todayISO()))} неделя</span></span><span class="go" aria-hidden="true">›</span></button></li>`:''}
       ${editor?`<li><button class="lesson" type="button" data-act="gosemester"><span class="t"><b>Семестр</b>
         <span>учебный план: предметы, контроль, часы</span></span><span class="go" aria-hidden="true">›</span></button></li>`:''}
     </ul>
@@ -574,9 +574,12 @@ function bgtuTpls(week){
      поэтому приводим их к числам и отбрасываем мусор: иначе сравнение с === ничего не найдёт. */
   return (S.tpl||[])
     .filter(t=>t&&t.source==='bgtu'&&(t.week||'odd')===week)
-    .map(t=>({...t,dow:Math.round(+t.dow),pair:Math.round(+t.pair)}))
-    .filter(t=>t.dow>=1&&t.dow<=7&&t.pair>=1);
+    .map(t=>({...t,dow:+t.dow,pair:+t.pair}))
+    .filter(t=>Number.isInteger(t.dow)&&t.dow>=1&&t.dow<=7&&Number.isInteger(t.pair)&&t.pair>=1&&t.pair<=24);
 }
+/* Ключ пары: одинаковые по названию строки из разных подгрупп — разные занятия,
+   а отличаться временем или аудиторией они не могут. */
+function bgtuLessonKey(row){ return JSON.stringify(['subjectId','pair','time','kind','room','teacherId','subgroup'].map(k=>String(row?.[k]??''))); }
 function bgtuCurrentWeekForDate(iso){
   const anchor=S.schedule?.weekAnchor || todayISO();
   const monday=d=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7));return t.getTime();};
@@ -593,37 +596,73 @@ function ensureBGTULessonsForDate(iso){
   if(!rows.length) return 0;
   let made=0;
   for(const t of rows){
-    const exists=S.lessons.some(l=>l.date===iso && l.source==='bgtu' && l.time===t.time && l.subjectId===t.subjectId && l.week===week);
+    const exists=S.lessons.some(l=>l.date===iso && l.source==='bgtu' && l.week===week && bgtuLessonKey(l)===bgtuLessonKey(t));
     if(exists) continue;
-    S.lessons.push({id:uid('l'),date:iso,pair:t.pair,subjectId:t.subjectId,kind:t.kind||'',room:t.room||'',teacherId:t.teacherId||'',week,time:t.time||'',source:'bgtu'});
+    S.lessons.push({id:uid('l'),date:iso,pair:t.pair,subjectId:t.subjectId,kind:t.kind||'',room:t.room||'',teacherId:t.teacherId||'',week,time:t.time||'',subgroup:t.subgroup||'',source:'bgtu'});
     made++;
   }
   if(made) save();
   return made;
 }
 
+// Только проверенный публичный снимок переживает замену журнала, но никогда —
+// чужая сессия: в таблицу попадает ровно то, что пришло с официального источника.
+let publicBgtuSnapshot=null;
+function validateBGTUSnapshot(data){
+  const rows=data?.lessons;
+  const validTime=value=>typeof value==='string' && /^([01]?\d|2[0-3]):[0-5]\d\s*[-–—]\s*([01]?\d|2[0-3]):[0-5]\d$/.test(value.trim()) && bgtuSlot(value).e>bgtuSlot(value).s;
+  if(!Array.isArray(rows)||!rows.length||!Number.isFinite(Date.parse(data.fetchedAt))
+    || !['odd','even'].includes(data.currentWeek)
+    || rows.some(r=>!r||typeof r.subject!=='string'||!r.subject.trim()
+      || !Number.isInteger(+r.dow)||+r.dow<1||+r.dow>7
+      || !validTime(r.time)||!['odd','even'].includes(r.week)
+      || (r.pair!=null&&(!Number.isInteger(+r.pair)||+r.pair<1||+r.pair>24))
+      || ['kind','room','teacher','subgroup'].some(k=>r[k]!=null&&typeof r[k]!=='string')))
+    throw new Error('Снимок расписания непригоден. Старые данные сохранены.');
+  if(data.period!=null&&typeof data.period!=='string')throw new Error('Период обучения не распознан');
+  return data;
+}
 function applyBGTUSchedule(data){
+  const result=importBGTUSchedule(data,S);
+  publicBgtuSnapshot=JSON.parse(JSON.stringify(data));
+  ensureBGTULessonsForDate(curDate);save();render();
+  return result;
+}
+window.restorePublicBGTU=next=>{
+  if(!publicBgtuSnapshot)return next;
+  if(next.group&&next.group!==publicBgtuSnapshot.group)return next;
+  // Идентификаторы пересобираются по словарям нового состояния, чужие строки не копируются.
+  importBGTUSchedule(publicBgtuSnapshot,next);
+  next.schedule.contentHash=publicBgtuSnapshot.contentHash||null;
+  return next;
+};
+
+function importBGTUSchedule(data,state){
+  validateBGTUSnapshot(data);
   const rows=Array.isArray(data?.lessons)?data.lessons:[];
   if(!rows.length) throw new Error('БГТУ вернуло пустое расписание');
 
-  if(typeof data.group==='string'&&data.group.trim())S.group=S.schedule.group=data.group.trim();
+  if(typeof data.group==='string'&&data.group.trim())state.group=state.schedule.group=data.group.trim();
 
   // Удаляем только ранее импортированные БГТУ-шаблоны. Ручные шаблоны пользователя не трогаем.
-  S.tpl=(S.tpl||[]).filter(t=>t.source!=='bgtu');
+  state.tpl=(state.tpl||[]).filter(t=>t.source!=='bgtu');
 
   // Удаляем только будущие неотмеченные автоматически созданные БГТУ-занятия,
   // чтобы обновление действительно отражалось в календаре, не ломая историю посещаемости.
   const today=todayISO();
-  S.lessons=(S.lessons||[]).filter(l=>{
+  state.lessons=(state.lessons||[]).filter(l=>{
     if(l.source!=='bgtu' || l.date<today) return true;
-    const hasMarks=Object.keys(S.att[l.id]||{}).length>0;
+    const hasMarks=Object.keys(state.att[l.id]||{}).length>0;
     return hasMarks;
   });
 
+  // Ключ словаря — точная строка источника: «Математика, 1 подгруппа» и
+  // «Математика 1 подгруппа» это одна дисциплина, а «Математика (1)» — другая.
+  const labelKey=value=>String(value??'').trim().replace(/\s+/g,' ').toLowerCase();
   const subjectMap=new Map();
   const teacherMap=new Map();
-  for(const p of (S.subjects||[])) subjectMap.set(norm(p.name),p);
-  for(const t of (S.teachers||[])) teacherMap.set(norm(t.fio),t);
+  for(const p of (state.subjects||[])) subjectMap.set(labelKey(p.name),p);
+  for(const t of (state.teachers||[])) teacherMap.set(labelKey(t.fio),t);
 
   let made=0, addedSubjects=0, addedTeachers=0;
   const seen=new Set();
@@ -631,44 +670,40 @@ function applyBGTUSchedule(data){
     const week=r.week==='even'?'even':'odd';
     const subject=String(r.subject||'').trim();
     if(!subject || !r.dow || !r.time) continue;
-    let p=subjectMap.get(norm(subject));
+    let p=subjectMap.get(labelKey(subject));
     if(!p){
       p={id:uid('p'),name:subject,control:'',teacherId:''};
-      S.subjects.push(p); subjectMap.set(norm(subject),p); addedSubjects++;
+      state.subjects.push(p); subjectMap.set(labelKey(subject),p); addedSubjects++;
     }
     let t=null;
     const teacher=String(r.teacher||'').trim();
     if(teacher){
-      t=teacherMap.get(norm(teacher));
+      t=teacherMap.get(labelKey(teacher));
       if(!t){
         t={id:uid('t'),fio:teacher,dept:'',contact:'',note:''};
-        S.teachers.push(t); teacherMap.set(norm(teacher),t); addedTeachers++;
+        state.teachers.push(t); teacherMap.set(labelKey(teacher),t); addedTeachers++;
       }
     }
-    const key=[week,r.dow,r.time,norm(subject),norm(r.kind||''),norm(teacher),norm(r.room||'')].join('|');
+    const key=JSON.stringify([week,+r.dow,r.time,subject,r.kind||'',teacher,r.room||'',r.subgroup||'',+r.pair||'']);
     if(seen.has(key)) continue;
     seen.add(key);
     const pair=+r.pair||pairFromTime(r.time)||1;
-    S.tpl.push({
-      id:uid('x'),source:'bgtu',group:S.schedule.group,week,dow:+r.dow,pair,
+    state.tpl.push({
+      id:uid('x'),source:'bgtu',group:state.schedule.group,week,dow:+r.dow,pair,
       subjectId:p.id,kind:String(r.kind||'').trim(),room:String(r.room||'').trim(),
-      teacherId:t?t.id:'',time:String(r.time||'').trim()
+      teacherId:t?t.id:'',time:String(r.time||'').trim(),subgroup:String(r.subgroup||'').trim()
     });
     made++;
   }
 
-  S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
-  S.schedule.fetchedAt=data.fetchedAt;
-  if(data.period){const parts=data.period.split('_');S.schedule.year=parts[0];S.schedule.semester=Number(parts[1])||1;}
-  S.schedule.currentWeek=data.currentWeek==='even'?'even':'odd';
-  S.schedule.week=S.schedule.currentWeek;
-  S.schedule.weekAnchor=new Date(data.fetchedAt).toLocaleDateString('sv-SE',{timeZone:'Europe/Moscow'});
-  S.schedule.lastError='';
-  S.schedule.remote=data.source||'БГТУ';
-
-  ensureBGTULessonsForDate(curDate);
-  save();
-  render();
+  state.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
+  state.schedule.fetchedAt=data.fetchedAt;
+  if(data.period){const parts=data.period.split('_');state.schedule.year=parts[0];state.schedule.semester=Number(parts[1])||1;}
+  state.schedule.currentWeek=data.currentWeek==='even'?'even':'odd';
+  state.schedule.week=state.schedule.currentWeek;
+  state.schedule.weekAnchor=new Date(data.fetchedAt).toLocaleDateString('sv-SE',{timeZone:'Europe/Moscow'});
+  state.schedule.lastError='';
+  state.schedule.remote=data.source||'БГТУ';
 
   return {made,addedSubjects,addedTeachers};
 }
@@ -683,7 +718,7 @@ async function loadScheduleSnapshot(){
       const res=await (viaSupabase?window.starostaSupabaseFetch(url,options):fetch(url,options));
       const data=await res.json();
       if(!res.ok||!data?.ok||!Array.isArray(data.lessons)||!data.lessons.length||!Number.isFinite(Date.parse(data.fetchedAt)))throw new Error('Invalid schedule');
-      return data;
+      return validateBGTUSnapshot(data);
     }finally{clearTimeout(timer);}
   }
   let data;
@@ -697,6 +732,9 @@ async function loadScheduleSnapshot(){
     if(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))return;
     const same=data.contentHash?data.contentHash===S.schedule?.contentHash:data.fetchedAt===S.schedule?.fetchedAt;
     if(typeof data.group==='string'&&data.group.trim())S.group=S.schedule.group=data.group.trim();
+    // Снимок держим в памяти: после входа и фонового обновления журнала
+    // расписание восстанавливается из него, а не из чужого облачного состояния.
+    publicBgtuSnapshot=JSON.parse(JSON.stringify(data));
     if(!same)applyBGTUSchedule(data);
     S.schedule.fetchedAt=data.fetchedAt;
     S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
@@ -704,7 +742,7 @@ async function loadScheduleSnapshot(){
     S.schedule.lastError='';
     save();
   }catch{
-    // Offline/missing fallback never overwrites existing lessons or shows a toast.
+    if(S===targetState)S.schedule.lastError='Нет публичного расписания. Показываю сохранённое.';
   }finally{
     scheduleLoading=false;
     if(S===targetState)render();
@@ -724,6 +762,7 @@ async function refreshBGTU(){
     if(!res.ok||!data.ok)throw new Error(data.error||data.errorMessage||`Сервис расписания недоступен (${res.status}).`);
     if(!Array.isArray(data.lessons)||data.lessons.length<10||!Number.isFinite(Date.parse(data.fetchedAt)))throw new Error('Получен неполный снимок расписания. Старые данные сохранены.');
     if(S!==targetState||window.cloudScheduleBlocked?.())return;
+    validateBGTUSnapshot(data);
     if(!(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))){
       if(!data.contentHash||data.contentHash!==S.schedule?.contentHash)applyBGTUSchedule(data);
       S.schedule.fetchedAt=data.fetchedAt;S.schedule.contentHash=data.contentHash||null;
@@ -734,7 +773,7 @@ async function refreshBGTU(){
     if(S!==targetState)return;
     ctx.bgtuFailed=true;
     ctx.bgtuMessage=error.name==='AbortError'?'Ответ не получен за 65 секунд. Проверка на сервере может продолжаться. Попробуй позже.':error instanceof TypeError?'Не удалось связаться с Yandex. Проверь интернет и доступность функции.':error.message;
-  }finally{clearTimeout(timer);ctx.bgtuBusy=false;render();}
+  }finally{clearTimeout(timer);if(S===targetState){ctx.bgtuBusy=false;render();}}
 }
 
 function viewBGTU(){
@@ -749,12 +788,13 @@ function viewBGTU(){
     <p class="bgtu-source">${esc(m.profile||'Системы искусственного интеллекта и обработка больших данных')} · ${esc(m.code||'09.03.02')} · ${esc(m.form||'Очное')}</p>
     <div class="bgtu-meta">
       <span class="chip">${esc(m.year||'2026-2027')}</span>
-      <span class="chip">${m.semester||1} семестр</span>
+      <span class="chip">${esc(m.semester||1)} семестр</span>
       <span class="chip">${esc(m.education||'бакалавр')}</span>
     </div>
     <button class="btn wide bgtu-sync" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled aria-busy="true"':''}>${ctx.bgtuBusy?'<span class="schedule-spinner" aria-hidden="true"></span> Обновляю…':'Обновить расписание'}</button>
     ${ctx.bgtuMessage?`<p class="bgtu-source ${ctx.bgtuFailed?'schedule-error':''}" role="status">${esc(ctx.bgtuMessage)}</p>`:''}
     <p class="bgtu-source ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'schedule-stale':''}">Обновлено: ${m.fetchedAt?esc(new Date(m.fetchedAt).toLocaleString('ru-RU')):'нет снимка'}</p>
+    ${m.lastError?`<p class="schedule-error" role="status">${esc(m.lastError)} Показаны сохранённые данные.</p>`:''}
     ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
   </div>`;
   if(editable)h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||S.group||'Группа')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
@@ -886,9 +926,8 @@ function bgtuWeekTable(week){
     +'<div class="bwside"><ul class="legend">'
     +`<li><span class="lg w${week==='odd'?' cur':''}">н</span>нечётная неделя — половинка сверху</li>`
     +`<li><span class="lg c${week==='even'?' cur':''}">ч</span>чётная неделя — половинка снизу</li>`
-    +'<li><span class="lg gap"></span>окно между парами этой недели</li>'
     +'</ul></div>'
-    +`<div class="bwscroll"><table class="bw" style="--bwcols:${days.length}"><caption class="sr-only">Расписание на нечётную и чётную недели: строки — номера пар, столбцы — дни недели</caption>`
+    +`<div class="bwscroll" tabindex="0" role="region" aria-label="Недельное расписание, прокручивается вбок"><table class="bw" style="--bwcols:${days.length}"><caption class="sr-only">Расписание на нечётную и чётную недели: строки — номера пар, столбцы — дни недели</caption>`
     +'<thead><tr><th class="pcol dhead"><span class="dh-day">день</span><span class="dh-pair">пара</span></th>';
   for(const dow of days){
     const isToday=dow===todayDow;

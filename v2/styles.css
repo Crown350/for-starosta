@@ -550,6 +550,7 @@ progress{width:100%;height:9px;border-radius:99px;overflow:hidden}
 .bw tr.gaprow td{vertical-align:middle;text-align:right;
   font-size:10px;letter-spacing:.04em;text-transform:uppercase}
 .bwside{display:flex;justify-content:flex-end;margin:8px 0 0}
+.bwscroll:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 .legend{list-style:none;display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 2px}
 .legend li{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-soft)}
 .lg{width:16px;height:16px;border-radius:5px;flex:none;font-size:9.5px;font-weight:800;

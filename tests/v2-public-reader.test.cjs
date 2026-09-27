@@ -76,7 +76,7 @@ test('BGTU screen explains an empty schedule instead of staying blank',()=>{
 test('cloud state keeps the BGTU week template the journal does not store',()=>{
   const cloud=fs.readFileSync(path.join(root,'cloud.js'),'utf8');
   const fn=cloud.slice(cloud.indexOf('const hasBgtu='),cloud.indexOf('async function pull()'));
-  const c=vm.createContext({});
+  const c=vm.createContext({window:{},usePublicSchedule:true});
   vm.runInContext(fn+';globalThis.keepBgtu=keepBgtu;',c);
   const rows=[{source:'bgtu',dow:1,pair:1},{source:'bgtu',dow:2,pair:2}];
   const merged=c.keepBgtu({tpl:[{id:'x1',source:'manual'}]},{tpl:[{id:'x0',source:'manual'},...rows]});
@@ -84,6 +84,47 @@ test('cloud state keeps the BGTU week template the journal does not store',()=>{
   assert.equal(merged.tpl.length,3,'свои строки не потеряны');
   const own=c.keepBgtu({tpl:[...rows]},{tpl:[{source:'bgtu',dow:9,pair:9}]});
   assert.equal(own.tpl.length,2,'облачные строки не дублируются');
+  c.usePublicSchedule=false;
+  const off=c.keepBgtu({tpl:[]},{tpl:rows});
+  assert.deepEqual(off.tpl,[],'у сессии без публичного расписания строки не возвращаются');
+});
+test('cloud state prefers the validated public snapshot over local rows',()=>{
+  const cloud=fs.readFileSync(path.join(root,'cloud.js'),'utf8');
+  const fn=cloud.slice(cloud.indexOf('const hasBgtu='),cloud.indexOf('async function pull()'));
+  const c=vm.createContext({usePublicSchedule:true,window:{restorePublicBGTU:next=>({...next,tpl:[{id:'x9',source:'bgtu'}]})}});
+  vm.runInContext(fn+';globalThis.keepBgtu=keepBgtu;',c);
+  const merged=c.keepBgtu({tpl:[]},{tpl:[{source:'bgtu',dow:1,pair:1},{source:'bgtu',dow:2,pair:2}]});
+  assert.deepEqual(merged.tpl.map(t=>t.id),['x9'],'снимок из памяти главнее локальных строк');
+});
+test('a validated public snapshot is rebuilt into a fresh journal state',()=>{
+  const importFn=source.slice(source.indexOf('let publicBgtuSnapshot=null;'),source.indexOf('async function loadScheduleSnapshot(){'));
+  const helpers=source.slice(source.indexOf('function pairFromTime(time){'),source.indexOf('function bgtuWeekLabel(w){'))
+    +source.slice(source.indexOf('function bgtuSlot(time){'),source.indexOf('function bgtuHm(min){'));
+  const snapshot={group:TEST_GROUP,fetchedAt:'2026-09-15T08:00:00Z',currentWeek:'odd',period:'2026_1',contentHash:'h1',
+    lessons:[{week:'odd',dow:'2',pair:'1',time:'08:00 - 09:35',subject:'Математика',kind:'Лекции',room:'231',teacher:'Иванов И. И.'},
+             {week:'odd',dow:2,pair:1,time:'08:00 - 09:35',subject:'Математика',kind:'Лекции',room:'231',teacher:'Иванов И. И.'},
+             {week:'even',dow:2,pair:1,time:'08:00 - 09:35',subject:'Математика',kind:'Практика',room:'232',teacher:'Иванов И. И.'}]};
+  const fresh=()=>({group:'',tpl:[{id:'x0',source:'manual'}],lessons:[],subjects:[],teachers:[],att:{},
+    schedule:{group:'',year:'',semester:0,week:'odd',currentWeek:'odd',weekAnchor:'',fetchedAt:'',lastError:''}});
+  let n=0;
+  const c=vm.createContext({S:fresh(),window:{},uid:()=>'u'+(++n),todayISO:()=>'2026-09-15',curDate:'2026-09-15',
+    save(){},render(){},ensureBGTULessonsForDate(){}});
+  vm.runInContext(helpers+importFn+';globalThis.validateBGTUSnapshot=validateBGTUSnapshot;',c);
+  c.applyBGTUSchedule(snapshot);
+  assert.equal(c.S.tpl.filter(t=>t.source==='bgtu').length,2,'пара, записанная и строкой, и числом, не задвоилась');
+  assert.equal(c.S.tpl.filter(t=>t.source==='manual').length,1,'ручные шаблоны не тронуты');
+  assert.equal(c.S.schedule.semester,1,'период обучения разобран');
+  const next=c.window.restorePublicBGTU(fresh());
+  assert.equal(next.group,TEST_GROUP,'группа восстановлена из снимка');
+  assert.equal(next.tpl.filter(t=>t.source==='bgtu').length,2,'строки БГТУ пересобраны в новом состоянии');
+  assert.equal(next.tpl.filter(t=>t.source==='manual').length,1,'чужие строки журнала не затронуты');
+  assert.equal(next.schedule.contentHash,'h1','отметка о содержимом перенесена');
+  assert.throws(()=>c.validateBGTUSnapshot({...snapshot,lessons:[{week:'odd',dow:2,pair:1,time:'позже',subject:'X'}]}),
+    /непригоден/,'текст вместо интервала отвергнут');
+  assert.throws(()=>c.validateBGTUSnapshot({...snapshot,lessons:[{week:'odd',dow:2,pair:1,time:'09:35 - 08:00',subject:'X'}]}),
+    /непригоден/,'перевёрнутый интервал отвергнут');
+  assert.throws(()=>c.validateBGTUSnapshot({...snapshot,currentWeek:'следующая'}),
+    /непригоден/,'неизвестная неделя отвергнута');
 });
 
 /* Настоящий код таблицы БГТУ целиком: нормализация данных, строки, окна. */
