@@ -47,14 +47,15 @@ function bgtu(editable){
    todayISO:()=>'2026-09-15',bgtuCurrentWeekForDate:()=>'odd',bgtuWeekLabel:w=>w,bgtuWeekGenitive:w=>w,Date});
   c.window={cloudCanEdit:()=>editable};vm.runInContext(bgtuFn,c);return c.viewBGTU();
 }
-test('public BGTU schedule shows both weeks in one table without editor controls',()=>{
+test('public BGTU schedule shows both weeks in one table and keeps refresh',()=>{
   const html=bgtu(false);
   assert.ok(html.includes('Обновлено:'),'дата доступна гостю');
   assert.ok(html.includes('Снимок старше 6 часов'),'устаревание видно гостю');
+  assert.ok(html.includes('data-act="syncbgtu"'),'гость тоже может обновить снимок');
   for(const text of ['<table class="bw"','Обе недели','нечётная неделя','чётная неделя','openbgtu',TEST_GROUP,'неделя'])assert.ok(html.includes(text),text);
-  for(const text of ['syncbgtu','setweek','Обновить','Параметры зафиксированы'])assert.ok(!html.includes(text),text);
+  for(const text of ['setweek','Параметры зафиксированы'])assert.ok(!html.includes(text),text);
 });
-test('editor BGTU schedule exposes refresh and keeps the week table',()=>{
+test('editor BGTU schedule exposes refresh, locked parameters and the week table',()=>{
   const html=bgtu(true);
   assert.ok(html.includes('data-act="syncbgtu"'),'refresh is available to the editor');
   for(const text of ['Обновлено:','Параметры зафиксированы','<table class="bw"'])assert.ok(html.includes(text),text);
