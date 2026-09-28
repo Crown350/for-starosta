@@ -73,6 +73,60 @@ test('BGTU screen explains an empty schedule instead of staying blank',()=>{
   assert.ok(bgtu(false,{tpls:[],loading:true}).includes('Загружаю расписание'),'во время загрузки');
   assert.ok(bgtu(true,{tpls:[],blocked:true}).includes('отключено'),'у старой сессии с отключённым расписанием');
 });
+test('cloud state rejects unvalidated previous templates and preserves incoming manual rows',()=>{
+  const cloud=fs.readFileSync(path.join(root,'cloud.js'),'utf8');
+  const fn=cloud.slice(cloud.indexOf('function keepBgtu('),cloud.indexOf('async function pull()'));
+  const c=vm.createContext({window:{},usePublicSchedule:true});
+  vm.runInContext(fn+';globalThis.keepBgtu=keepBgtu;',c);
+  const rows=[{source:'bgtu',dow:1,pair:1},{source:'bgtu',dow:2,pair:2}];
+  const merged=c.keepBgtu({tpl:[{id:'x1',source:'manual'}]},{tpl:[{id:'x0',source:'manual'},...rows]});
+  assert.equal(merged.tpl.filter(t=>t.source==='bgtu').length,0,'неподтверждённые строки прежней сессии не переносятся');
+  assert.equal(merged.tpl.length,1,'ручная строка нового журнала сохранена');
+  const own=c.keepBgtu({tpl:[...rows]},{tpl:[{source:'bgtu',dow:9,pair:9}]});
+  assert.equal(own.tpl.length,2,'облачные строки не дублируются');
+  c.usePublicSchedule=false;
+  const off=c.keepBgtu({tpl:[]},{tpl:rows});
+  assert.deepEqual(off.tpl,[],'у сессии без публичного расписания строки не возвращаются');
+});
+test('cloud state prefers the validated public snapshot over local rows',()=>{
+  const cloud=fs.readFileSync(path.join(root,'cloud.js'),'utf8');
+  const fn=cloud.slice(cloud.indexOf('function keepBgtu('),cloud.indexOf('async function pull()'));
+  const c=vm.createContext({usePublicSchedule:true,window:{restorePublicBGTU:next=>({...next,tpl:[{id:'x9',source:'bgtu'}]})}});
+  vm.runInContext(fn+';globalThis.keepBgtu=keepBgtu;',c);
+  const merged=c.keepBgtu({tpl:[]},{tpl:[{source:'bgtu',dow:1,pair:1},{source:'bgtu',dow:2,pair:2}]});
+  assert.deepEqual(merged.tpl.map(t=>t.id),['x9'],'снимок из памяти главнее локальных строк');
+});
+test('a validated public snapshot is rebuilt into a fresh journal state',()=>{
+  const importFn=source.slice(source.indexOf('let publicBgtuSnapshot=null;'),source.indexOf('async function loadScheduleSnapshot(){'));
+  const helpers=source.slice(source.indexOf('function pairFromTime(time){'),source.indexOf('function bgtuWeekLabel(w){'))
+    +source.slice(source.indexOf('function bgtuSlot(time){'),source.indexOf('function bgtuHm(min){'));
+  const snapshot={group:TEST_GROUP,fetchedAt:'2026-09-15T08:00:00Z',currentWeek:'odd',period:'2026_1',contentHash:'h1',
+    lessons:[{week:'odd',dow:'2',pair:'1',time:'08:00 - 09:35',subject:'Математика',kind:'Лекции',room:'231',teacher:'Иванов И. И.'},
+             {week:'odd',dow:2,pair:1,time:'08:00 - 09:35',subject:'Математика',kind:'Лекции',room:'231',teacher:'Иванов И. И.'},
+             {week:'even',dow:2,pair:1,time:'08:00 - 09:35',subject:'Математика',kind:'Практика',room:'232',teacher:'Иванов И. И.'}]};
+  const fresh=()=>({group:'',tpl:[{id:'x0',source:'manual'}],lessons:[],subjects:[],teachers:[],att:{},
+    schedule:{group:'',year:'',semester:0,week:'odd',currentWeek:'odd',weekAnchor:'',fetchedAt:'',lastError:''}});
+  let n=0;
+  const c=vm.createContext({S:fresh(),window:{},uid:()=>'u'+(++n),todayISO:()=>'2026-09-15',curDate:'2026-09-15',
+    save(){},render(){},ensureBGTULessonsForDate(){}});
+  vm.runInContext(helpers+importFn+';globalThis.validateBGTUSnapshot=validateBGTUSnapshot;',c);
+  c.applyBGTUSchedule(snapshot);
+  assert.equal(c.S.tpl.filter(t=>t.source==='bgtu').length,2,'пара, записанная и строкой, и числом, не задвоилась');
+  assert.equal(c.S.tpl.filter(t=>t.source==='manual').length,1,'ручные шаблоны не тронуты');
+  assert.equal(c.S.schedule.semester,1,'период обучения разобран');
+  const next=c.window.restorePublicBGTU(fresh());
+  assert.equal(next.group,TEST_GROUP,'группа восстановлена из снимка');
+  assert.equal(next.tpl.filter(t=>t.source==='bgtu').length,2,'строки БГТУ пересобраны в новом состоянии');
+  assert.equal(next.tpl.filter(t=>t.source==='manual').length,1,'чужие строки журнала не затронуты');
+  assert.equal(next.schedule.contentHash,'h1','отметка о содержимом перенесена');
+  assert.throws(()=>c.validateBGTUSnapshot({...snapshot,lessons:[{week:'odd',dow:2,pair:1,time:'позже',subject:'X'}]}),
+    /непригоден/,'текст вместо интервала отвергнут');
+  assert.throws(()=>c.validateBGTUSnapshot({...snapshot,lessons:[{week:'odd',dow:2,pair:1,time:'09:35 - 08:00',subject:'X'}]}),
+    /непригоден/,'перевёрнутый интервал отвергнут');
+  assert.throws(()=>c.validateBGTUSnapshot({...snapshot,currentWeek:'следующая'}),
+    /непригоден/,'неизвестная неделя отвергнута');
+});
+
 /* Настоящий код таблицы БГТУ целиком: нормализация данных, строки, окна. */
 const weekFn=source.slice(source.indexOf('function bgtuWeekLabel(w){'),source.indexOf('function viewDir(){'));
 const T=(week,dow,pair,extra={})=>({source:'bgtu',week,dow,pair,time:'08:00 - 09:35',subjectId:'p1',room:'231',...extra});
@@ -135,4 +189,87 @@ test('BGTU table sizes itself by the number of day columns',()=>{
   assert.ok(html.includes('--bwcols:2'),'два дня с парами - два столбца');
   assert.ok(!html.includes('ВТ'),'пустых столбцов нет');
   assert.ok(html.includes('>1/0 н/ч</small>'),'второй день со своей подписью');
+});
+test('pair column shows the whole interval, not only the start',()=>{
+  const html=sched([T('odd',1,1,{time:'10:00 - 11:35'})]);
+  assert.ok(html.includes('<small>10:00<i>11:35</i></small>'),'начало и конец пары в одной ячейке');
+  const bad=sched([{source:'bgtu',week:'odd',dow:1,pair:1,subjectId:'p1',time:'позже'}]);
+  assert.ok(bad.includes('<b>1</b></th>'),'пара с нечитаемым временем остаётся на месте');
+  assert.ok(!/<th class="pcol"[^>]*><b>1<\/b><small>/.test(bad),'нечитаемое время не превращается в 00:00');
+});
+test('teacher gets its own line and never shares it with the kind and the room',()=>{
+  const one=sched([T('odd',1,1,{teacherId:'t1'})]);
+  assert.ok(one.includes('<span class="t2">Иванов</span>'),'преподаватель стоит отдельной строкой');
+  const meta=/<small class="meta">([\s\S]*?)<\/small>/.exec(one)[1];
+  assert.ok(!meta.includes('Иванов'),'в строке вида занятия и аудитории преподавателя нет');
+  const both=sched([T('odd',1,1,{teacherId:'t1'}),T('even',1,1,{teacherId:'t1'})]);
+  assert.ok(both.includes('we both'),'одинаковая пара обеих недель остаётся одной клеткой');
+  assert.ok(both.includes('<span class="t2">Иванов</span>'),'в общей клетке преподаватель тоже виден');
+});
+test('BGTU table keeps every parallel lesson of the same pair number',()=>{
+  const html=sched([T('odd',1,1,{subjectId:'p1',room:'201'}),T('odd',1,1,{subjectId:'p2',room:'202'})]);
+  for(const id of ['p1','p2'])assert.ok(html.includes('Предмет '+id),'видна подгруппа '+id);
+  for(const room of ['201','202'])assert.ok(html.includes(room),'видна аудитория '+room);
+  assert.equal(/class="wl"/g.test(html),true,'занятия нарисованы отдельными блоками');
+  assert.ok(html.includes('1/0 н/ч'),'счётчик в шапке считает номера пар, а не записи');
+  assert.ok(html.includes('разные<br>времена')||html.includes('<small>08:00<i>'),'время строки не выдаётся за общее');
+});
+test('BGTU table names parallel subgroups apart',()=>{
+  const c=vm.createContext({esc:String,subjName:id=>id==='p1'?'Математика (1 подгруппа)':'Математика (2 подгруппа)'});
+  vm.runInContext(source.slice(source.indexOf('const BGTU_DOW_S='),source.indexOf('function bgtuTeacherShort(id){')),c);
+  assert.equal(c.bgtuShortName('p1',true),'Математика (1 подгруппа)','скобка с подгруппой сохранена');
+  assert.equal(c.bgtuShortName('p1',false),'Математика','одиночная пара теряет скобку');
+});
+test('BGTU table keeps a window whose pair number would be collapsed',()=>{
+  const html=sched([T('odd',1,1,{time:'08:00 - 09:35'}),T('odd',1,3,{time:'12:00 - 13:35'})]);
+  assert.ok(html.includes('we win'),'окно между парами показано');
+  assert.ok(html.includes('09:35–12:00'),'границы окна верны');
+  assert.ok(!html.includes('пар нет'),'номер пары не схлопнут в строку «пар нет»');
+  const junk=sched([T('odd',1,1,{time:'позже'}),T('odd',1,3,{time:'12:00 - 13:35'})]);
+  assert.ok(!junk.includes('we win'),'нечитаемое время границы окна не выдумывает');
+  assert.ok(!/<th class="pcol"[^>]*><b>[13]<\/b><small>00:00/.test(junk),'в углу не появилось 00:00');
+});
+test('semester tab says what happened instead of loading forever',async()=>{
+  const semesterFn=source.slice(source.indexOf('let curriculumPending=true'),source.indexOf('function viewMore(){'));
+  const rows=[{name:'Математика',code:'Б1.О.01',control:'Экзамен',extra:null,lek:36,lab:0,pr:18,ze:5,kafedra:'КТ'}];
+  async function semester(mode){
+    let renders=0;
+    const c=vm.createContext({curriculum:[],curriculumPending:true,curriculumError:'',tab:'semester',view:null,
+      S:{group:TEST_GROUP,schedule:{semester:1}},esc:String,plural:(n,a)=>n+' '+a,head:t=>t,
+      render:()=>renders++,
+      fetch:async()=>{
+        if(mode==='offline')throw new Error('offline');
+        if(mode==='invalid')return {ok:true,status:200,json:async()=>[]};
+        return {ok:true,status:200,json:async()=>rows};
+      }});
+    vm.runInContext(semesterFn,c);
+    const waiting=c.viewSemester();
+    await c.loadCurriculum();
+    return {waiting,shown:c.viewSemester(),renders};
+  }
+  const ok=await semester('ok');
+  assert.ok(ok.waiting.includes('загружается'),'до загрузки вкладка честно ждёт');
+  assert.ok(ok.shown.includes('Математика'),'после загрузки видна программа');
+  assert.ok(!ok.shown.includes('загружается'),'сообщение о загрузке уходит');
+  assert.equal(ok.renders,1,'открытый экран перерисовывается, а не ждёт действия');
+  for(const mode of ['offline','invalid']){
+    const bad=await semester(mode);
+    assert.ok(bad.shown.includes('не загрузилась'),mode+': сказано, что не вышло');
+    assert.ok(!bad.shown.includes('загружается'),mode+': экран не обещает загрузку вечно');
+  }
+});
+test('semester header keeps the group and semester as data, not markup',()=>{
+  const semesterFn=source.slice(source.indexOf('let curriculumPending=true'),source.indexOf('function viewMore(){'));
+  const c=vm.createContext({curriculum:[],curriculumPending:false,curriculumError:'',tab:'semester',view:null,plural:(n,a)=>n+' '+a,
+    S:{group:'"><img src=x onerror=alert(1)>',schedule:{semester:'<b>1</b>'}}});
+  vm.runInContext(source.slice(source.indexOf('function esc('),source.indexOf('function todayISO('))
+    +source.slice(source.indexOf('function head('),source.indexOf('/* ---------- СЕГОДНЯ'))+semesterFn,c);
+  const html=c.viewSemester();
+  for(const tag of html.match(/<[^>]*>/g)||[]){
+    const markup=tag.replace(/"[^"]*"|'[^']*'/g,'""');
+    assert.doesNotMatch(markup,/\s(?:on\w+|autofocus)\s*(?:=|>)/i);
+  }
+  assert.doesNotMatch(html,/<(?:img|b)\b/i);
+  assert.ok(html.includes('&quot;&gt;&lt;img src=x onerror=alert(1)&gt;'),'группа из снимка остаётся данными');
+  assert.ok(html.includes('&lt;b&gt;1&lt;/b&gt;'),'семестр из состояния остаётся данными');
 });
