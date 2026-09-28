@@ -23,13 +23,13 @@ test('all distinct lessons and subgroups survive import, daily expansion and tab
   assert.equal(c.S.tpl.length,3);assert.equal(c.S.lessons.length,3);
   const html=c.bgtuWeekTable('odd');
   for(const text of ['Предмет 1','Предмет 2','Преподаватель 1','Преподаватель 2','101','102','Подгруппа'])assert.ok(html.includes(text),text);
-  assert.equal((html.match(/<details class="bw-lesson"/g)||[]).length,3);
+  assert.equal((html.match(/<div class="wl" /g)||[]).length,3);
 });
-test('complete per-lesson time/name/type/teacher/room stays accessible in native details',()=>{
+test('compact lessons keep complete accessible labels without details or extra dialogs',()=>{
   const {c}=setup();const full='Очень длинное название предмета с дополнительными сведениями и подгруппой';
   c.applyBGTUSchedule(snapshot([lesson({subject:full}),lesson({dow:2,time:'10:00 - 11:35'})]));
   const html=c.bgtuWeekTable('odd');assert.ok(html.includes(full));assert.ok(html.includes('10:00 - 11:35'));assert.ok(html.includes('08:00 - 09:35'));
-  assert.match(html,/разное<br>время/);assert.match(html,/<summary>/);assert.match(html,/tabindex="0" role="region"/);
+  assert.match(html,/разные<br>времена/);assert.match(html,/class="wl" role="group" aria-label=/);assert.doesNotMatch(html,/<(?:details|summary|dialog)\b/);assert.match(html,/tabindex="0" role="region"/);
 });
 test('More and table use the same week across Sunday/Monday, including previous weeks',()=>{
   const {c,setDate}=setup();c.applyBGTUSchedule(snapshot());
@@ -94,6 +94,27 @@ test('old in-flight snapshots cannot replace a new session or clear its loading 
   resolve({ok:true,json:async()=>snapshot()});await pending;
   assert.equal(c.S,current);assert.equal(c.S.tpl.length,0);assert.equal(c.scheduleLoading,true);
 });
+
+test('only the newest snapshot request owns loading, data and errors across sessions',async()=>{
+  for(const changeSession of [false,true])for(const oldFails of [false,true])for(const currentFails of [false,true]){
+    const t=setup(),{c}=t;c.applyBGTUSchedule(snapshot());
+    const pending=[];c.fetch=()=>new Promise((resolve,reject)=>pending.push({resolve,reject}));
+    const old=c.loadScheduleSnapshot();
+    if(changeSession){c.S=c.fresh();c.window.restorePublicBGTU(c.S);}
+    const current=c.loadScheduleSnapshot(),state=c.S,before=JSON.stringify(c.S.tpl),renders=t.renders;
+    if(oldFails)pending[0].reject(Error('old request failed'));
+    else pending[0].resolve({ok:true,json:async()=>snapshot([lesson({subject:'STALE'})])});
+    await old;
+    assert.equal(c.scheduleLoading,true);assert.equal(c.S,state);assert.equal(t.renders,renders);
+    assert.equal(JSON.stringify(c.S.tpl),before);assert.equal(c.S.schedule.lastError,'');
+    if(currentFails)pending[1].reject(Error('current request failed'));
+    else pending[1].resolve({ok:true,json:async()=>({...snapshot([lesson({subject:'CURRENT'})]),fetchedAt:'2026-09-21T10:00:00Z'})});
+    await current;
+    assert.equal(c.scheduleLoading,false);assert.ok(t.renders>renders);
+    if(currentFails){assert.equal(JSON.stringify(c.S.tpl),before);assert.ok(c.S.schedule.lastError);}
+    else assert.equal(c.S.subjects.find(p=>p.id===c.S.tpl[0].subjectId).name,'CURRENT');
+  }
+});
 test('invalid Edge snapshot falls back; refresh failure keeps saved rows and reports an escaped error',async()=>{
   const {c}=setup();c.window.STAROSTA_SUPABASE_URL='test';c.window.starostaSupabaseFetch=async()=>({ok:true,json:async()=>snapshot([{}])});
   await c.loadScheduleSnapshot();assert.equal(c.S.tpl.length,1);
@@ -103,7 +124,7 @@ test('invalid Edge snapshot falls back; refresh failure keeps saved rows and rep
 });
 test('real committed public snapshot remains accepted',()=>{const {c}=setup();assert.doesNotThrow(()=>c.applyBGTUSchedule(JSON.parse(fs.readFileSync(require.resolve('../schedule.json'),'utf8'))));assert.ok(c.S.tpl.length>=10);});
 
-function cloudSetup(){
+function cloudSetup(group='ТЕСТ',publicSchedule=true){
   const {c}=setup();c.applyBGTUSchedule(snapshot());
   const elements={},events={},requests=[];let tick;let revision=1;
   const element=()=>({value:'',hidden:false,checked:false,dataset:{},classList:{toggle(){},remove(){},add(){}},
@@ -118,11 +139,21 @@ function cloudSetup(){
     requests.push({url,method:options?.method||'GET'});
     if(url==='../schedule.json')return {ok:true,json:async()=>snapshot()};
     const key=options.headers.Authorization;
-    return {ok:true,json:async()=>url==='/api/session'?{usePublicSchedule:true}:{revision,data:{group:'ТЕСТ',students:[{id:key,fio:key}],subjects:[{id:'p1',name:'Private'}]}}};
+    return {ok:true,json:async()=>url==='/api/session'?{usePublicSchedule:publicSchedule}:{revision,usePublicSchedule:publicSchedule,data:{group,students:[{id:key,fio:key}],subjects:[{id:'p1',name:'Private'}]}}};
   };
   vm.runInContext(cloud,c);
   return {c,events,requests,elements,login:async key=>{c.document.getElementById('cloud-key').value=key;await elements['cloud-login'].onsubmit({preventDefault(){}});},refresh:()=>{revision++;return tick();}};
 }
+
+test('actual cloud login never restores the previous group or bypasses public-schedule opt-out',async()=>{
+  for(const [group,enabled] of [['OTHER',true],['ТЕСТ',false]]){
+    const t=cloudSetup(group,enabled);t.c.loadScheduleSnapshot=async()=>{};
+    await t.login('new-session');assert.equal(t.c.S.group,group);assert.equal(t.c.S.tpl.length,0);
+    assert.equal(t.c.S.subjects.length,1);assert.equal(t.c.S.teachers.length,0);
+    await t.elements['cloud-pull'].onclick();await t.refresh();
+    assert.equal(t.c.S.tpl.length,0);assert.equal(t.c.S.group,group);
+  }
+});
 test('login, cloud reload, background refresh, logout and relogin retain public schedule without private carryover',async()=>{
   const t=cloudSetup();await t.login('session-one');assert.equal(t.c.window.cloudCanEdit(),true);assert.equal(t.c.S.tpl.length,1);
   await t.elements['cloud-pull'].onclick();await t.refresh();assert.equal(t.c.S.tpl.length,1);

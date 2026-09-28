@@ -495,19 +495,29 @@ function viewStudent(){
 }
 
 /* ---------- ЕЩЁ ---------- */
+/* Программа приезжает отдельным файлом: пока её нет — вкладка честно говорит, что
+   грузится, а после неудачи — что не вышло. Иначе экран навсегда обещает загрузку. */
+let curriculumPending=true, curriculumError='';
 async function loadCurriculum(){
   try{
     const response=await fetch('../data/curriculum.json',{cache:'no-store'});
-    if(!response.ok || response.status===204)return;
+    if(!response.ok || response.status===204)throw new Error('empty');
     const rows=await response.json();
-    if(!Array.isArray(rows)||!rows.length||!rows.every(r=>r&&typeof r.name==='string'&&typeof r.code==='string'&&['Экзамен','Зачёт','ЗачётСОценкой'].includes(r.control)&&[null,'КП','КР'].includes(r.extra)&&['lek','lab','pr','ze'].every(k=>Number.isFinite(r[k])&&r[k]>=0)))return;
-    curriculum=rows;const st=$('semester-tab');if(st)st.hidden=false;measureSoon();
-  }catch{} // Optional static data: no unhandled errors, tab remains hidden.
+    if(!Array.isArray(rows)||!rows.length||!rows.every(r=>r&&typeof r.name==='string'&&typeof r.code==='string'&&['Экзамен','Зачёт','ЗачётСОценкой'].includes(r.control)&&[null,'КП','КР'].includes(r.extra)&&['lek','lab','pr','ze'].every(k=>Number.isFinite(r[k])&&r[k]>=0)))throw new Error('invalid');
+    curriculum=rows;
+  }catch{
+    curriculumError='Рабочая программа не загрузилась: проверь соединение и обнови страницу.';
+  }finally{
+    curriculumPending=false;
+    /* Вкладка в таб-баре есть всегда, поэтому уже открытый экран перерисовываем. */
+    if(view==null&&tab==='semester')render();
+  }
 }
 function viewSemester(){
   const n=control=>curriculum.filter(r=>r.control===control).length;
-  let h=head('Семестр','1 курс · '+S.schedule.semester+' семестр · '+S.group)+'</header>';
-  if(!curriculum.length)return h+'<div class="card"><p class="hint">Рабочая программа ещё загружается.</p></div>';
+  let h=head('Семестр','1 курс · '+esc(S.schedule.semester)+' семестр · '+esc(S.group))+'</header>';
+  if(curriculumPending)return h+'<div class="card"><p class="hint" role="status">Рабочая программа загружается…</p></div>';
+  if(curriculumError||!curriculum.length)return h+'<div class="card"><p class="hint" role="status">'+esc(curriculumError||'Рабочая программа пуста, показать нечего.')+'</p></div>';
   h+='<div class="card semester-summary"><span>'+plural(n('Экзамен'),'экзамен','экзамена','экзаменов')+'</span><span>'+plural(n('Зачёт')+n('ЗачётСОценкой'),'зачёт','зачёта','зачётов')+'</span><span>'+curriculum.filter(r=>r.extra).length+' курсовых</span><span>'+curriculum.reduce((s,r)=>s+r.ze,0)+' з.е.</span></div><p class="hint">По дисциплинам, подтверждённым расписанием. Часы: лекции / лабораторные / практические.</p><ul class="grouplist">';
   for(const r of curriculum)h+='<li><div><div class="grp">'+esc(r.code)+' · '+r.ze+' з.е.</div><div class="fio"><b>'+esc(r.name)+'</b></div><div class="chips"><span class="chip '+(r.control==='Экзамен'?'semester-exam':r.control==='ЗачётСОценкой'?'warn':'ok')+'">'+(r.control==='ЗачётСОценкой'?'Зачёт с оценкой':esc(r.control))+'</span>'+(r.extra?'<span class="chip warn">'+esc(r.extra)+'</span>':'')+'</div><p class="hint">Лек: '+r.lek+' · Лаб: '+r.lab+' · Пр: '+r.pr+' ч.<br>Кафедра '+esc(r.kafedra)+'</p></div></li>';
   return h+'</ul>';
@@ -602,7 +612,8 @@ function ensureBGTULessonsForDate(iso){
   return made;
 }
 
-// Only validated public data survives journal replacement, never another session's state.
+// Только проверенный публичный снимок переживает замену журнала, но никогда —
+// чужая сессия: в таблицу попадает ровно то, что пришло с официального источника.
 let publicBgtuSnapshot=null;
 function validateBGTUSnapshot(data){
   const rows=data?.lessons;
@@ -614,8 +625,8 @@ function validateBGTUSnapshot(data){
       || !validTime(r.time)||!['odd','even'].includes(r.week)
       || (r.pair!=null&&(!Number.isInteger(+r.pair)||+r.pair<1||+r.pair>24))
       || ['kind','room','teacher','subgroup'].some(k=>r[k]!=null&&typeof r[k]!=='string')))
-    throw new Error('Получен неполный снимок расписания. Старые данные сохранены.');
-  if(data.period!=null&&typeof data.period!=='string')throw new Error('Некорректный период расписания');
+    throw new Error('Снимок расписания непригоден. Старые данные сохранены.');
+  if(data.period!=null&&typeof data.period!=='string')throw new Error('Период обучения не распознан');
   return data;
 }
 function applyBGTUSchedule(data){
@@ -627,7 +638,7 @@ function applyBGTUSchedule(data){
 window.restorePublicBGTU=next=>{
   if(!publicBgtuSnapshot)return next;
   if(next.group&&next.group!==publicBgtuSnapshot.group)return next;
-  // Rebuild IDs against the incoming dictionaries without copying private rows.
+  // Идентификаторы пересобираются по словарям нового состояния, чужие строки не копируются.
   importBGTUSchedule(publicBgtuSnapshot,next);
   next.schedule.contentHash=publicBgtuSnapshot.contentHash||null;
   return next;
@@ -652,6 +663,8 @@ function importBGTUSchedule(data,state){
     return hasMarks;
   });
 
+  // Ключ словаря — точная строка источника: «Математика, 1 подгруппа» и
+  // «Математика 1 подгруппа» это одна дисциплина, а «Математика (1)» — другая.
   const labelKey=value=>String(value??'').trim().replace(/\s+/g,' ').toLowerCase();
   const subjectMap=new Map();
   const teacherMap=new Map();
@@ -678,7 +691,7 @@ function importBGTUSchedule(data,state){
         state.teachers.push(t); teacherMap.set(labelKey(teacher),t); addedTeachers++;
       }
     }
-    const key=JSON.stringify([week,+r.dow,r.time,subject,r.kind||'',teacher,r.room||'',r.subgroup||'',r.pair||'']);
+    const key=JSON.stringify([week,+r.dow,r.time,subject,r.kind||'',teacher,r.room||'',r.subgroup||'',+r.pair||'']);
     if(seen.has(key)) continue;
     seen.add(key);
     const pair=+r.pair||pairFromTime(r.time)||1;
@@ -699,13 +712,13 @@ function importBGTUSchedule(data,state){
   state.schedule.lastError='';
   state.schedule.remote=data.source||'БГТУ';
 
-
   return {made,addedSubjects,addedTeachers};
 }
 
+let scheduleRequestId=0;
 async function loadScheduleSnapshot(){
   if(window.cloudScheduleBlocked?.())return;
-  const targetState=S;
+  const targetState=S, requestId=++scheduleRequestId;
   async function load(url,viaSupabase=false){
     const ac=new AbortController();const timer=viaSupabase?null:setTimeout(()=>ac.abort(),20000);
     try{
@@ -723,10 +736,12 @@ async function loadScheduleSnapshot(){
       try{data=await load('/functions/v1/fetch-schedule',true);}
       catch{data=await load('../schedule.json');}
     }else data=await load('../schedule.json');
-    if(S!==targetState||window.cloudScheduleBlocked?.())return;
+    if(S!==targetState||requestId!==scheduleRequestId||window.cloudScheduleBlocked?.())return;
     if(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))return;
     const same=data.contentHash?data.contentHash===S.schedule?.contentHash:data.fetchedAt===S.schedule?.fetchedAt;
     if(typeof data.group==='string'&&data.group.trim())S.group=S.schedule.group=data.group.trim();
+    // Снимок держим в памяти: после входа и фонового обновления журнала
+    // расписание восстанавливается из него, а не из чужого облачного состояния.
     publicBgtuSnapshot=JSON.parse(JSON.stringify(data));
     if(!same)applyBGTUSchedule(data);
     S.schedule.fetchedAt=data.fetchedAt;
@@ -735,9 +750,9 @@ async function loadScheduleSnapshot(){
     S.schedule.lastError='';
     save();
   }catch{
-    if(S===targetState)S.schedule.lastError='Не удалось загрузить расписание. Попробуй обновить позже.';
+    if(S===targetState&&requestId===scheduleRequestId)S.schedule.lastError='Нет публичного расписания. Показываю сохранённое.';
   }finally{
-    if(S===targetState){scheduleLoading=false;render();}
+    if(S===targetState&&requestId===scheduleRequestId){scheduleLoading=false;render();}
   }
 }
 
@@ -786,7 +801,7 @@ function viewBGTU(){
     <button class="btn wide bgtu-sync" data-act="syncbgtu" ${ctx.bgtuBusy?'disabled aria-busy="true"':''}>${ctx.bgtuBusy?'<span class="schedule-spinner" aria-hidden="true"></span> Обновляю…':'Обновить расписание'}</button>
     ${ctx.bgtuMessage?`<p class="bgtu-source ${ctx.bgtuFailed?'schedule-error':''}" role="status">${esc(ctx.bgtuMessage)}</p>`:''}
     <p class="bgtu-source ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'schedule-stale':''}">Обновлено: ${m.fetchedAt?esc(new Date(m.fetchedAt).toLocaleString('ru-RU')):'нет снимка'}</p>
-    ${m.lastError?`<p class="schedule-error" role="status">${esc(m.lastError)} Сохранённое расписание не изменено.</p>`:''}
+    ${m.lastError?`<p class="schedule-error" role="status">${esc(m.lastError)} Показаны сохранённые данные.</p>`:''}
     ${m.fetchedAt&&Date.now()-Date.parse(m.fetchedAt)>21600000?'<p class="hint schedule-stale" role="status">Снимок старше 6 часов. Возможны изменения в расписании.</p>':''}
   </div>`;
   if(editable)h+=`<div class="card"><p class="hint">Параметры зафиксированы: ФИТ · бакалавр · 09.03.02 · «Системы искусственного интеллекта и обработка больших данных» · очная · ${esc(m.group||S.group||'Группа')}. Расписание загружается из официального источника. Дата получения указана выше. Нечётная и чётная недели хранятся отдельно.</p></div>`;
@@ -820,8 +835,9 @@ const BGTU_SHORT={
   'физическая культура и спорт':'Физкультура',
   'технологии личностно-профессионального развития':'Технологии ЛПР'
 };
-function bgtuShortName(id){
-  const name=String(subjName(id)||'').trim().replace(/\s*\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();
+function bgtuShortName(id,keepGroup){
+  const raw=String(subjName(id)||'').trim();
+  const name=(keepGroup?raw:raw.replace(/\s*\([^)]*\)/g,' ')).replace(/\s+/g,' ').trim();
   const known=BGTU_SHORT[name.toLowerCase()];
   if(known)return known;
   if(name.length<=44)return name;
@@ -841,31 +857,41 @@ function bgtuKindLabel(kind){
   const k=String(kind||'').trim().toLowerCase();
   return BGTU_KIND[k]||(/^[а-яё]{3,12}$/i.test(k)?k:'');
 }
-const bgtuLessonKey=row=>JSON.stringify(['subjectId','pair','time','kind','room','teacherId','subgroup'].map(k=>String(row[k]??'')));
-const atPair=(list,dow,pair)=>[...new Map(list.filter(t=>t.dow===dow&&t.pair===pair).map(t=>[bgtuLessonKey(t),t])).entries()]
-  .sort(([a],[b])=>a.localeCompare(b)).map(([,row])=>row);
+/* Ключ пары: одинаковые по названию строки из разных подгрупп — разные занятия,
+   а отличаться временем или аудиторией они не могут. */
+function bgtuLessonKey(row){ return JSON.stringify(['subjectId','pair','time','kind','room','teacherId','subgroup'].map(k=>String(row?.[k]??''))); }
+/* Все занятия этого номера пары: параллельные подгруппы в один номер попадают все,
+   иначе в таблице осталась бы одна из них. Порядок задаёт ключ строки, а не данные. */
+const atPair=(list,dow,pair)=>[...new Map(list.filter(t=>t.dow===dow&&t.pair===pair)
+  .map(t=>[bgtuLessonKey(t),t])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([,row])=>row);
 /* Совпадают ли две записи полностью — тогда клетка не делится пополам. */
 function bgtuSameLesson(a,b){
   return a.length===b.length&&a.every((row,i)=>bgtuLessonKey(row)===bgtuLessonKey(b[i]));
 }
-/* Состояние половинки клетки для одной недели: занятие, окно между её парами или свободно.
-   Окно — разрыв между парами этой же недели: нужна пара и выше, и ниже. */
-function bgtuHalfState(list,dow,pair,maxPair,has){
-  const rows=atPair(list,dow,pair);
-  if(rows.length)return{kind:'class',rows};
+/* Окно между парами этой недели и дня: нужна пара и выше, и ниже, а время обеих
+   границ обязано читаться, иначе границы выдуманы. */
+function bgtuWindow(list,dow,pair,maxPair,has){
   let prev=0,next=0;
   for(let p=pair-1;p>=1;p--)if(has(list,dow,p)){prev=p;break;}
   for(let p=pair+1;p<=maxPair;p++)if(has(list,dow,p)){next=p;break;}
-  if(!prev||!next)return{kind:'free'};
+  if(!prev||!next)return null;
   const before=atPair(list,dow,prev).map(r=>bgtuSlot(r.time));
   const after=atPair(list,dow,next).map(r=>bgtuSlot(r.time));
-  if([...before,...after].some(t=>!t.s||!t.e))return{kind:'free'};
+  if([...before,...after].some(t=>!t.s||!t.e))return null;
   const from=Math.max(...before.map(t=>t.e));
   const to=Math.min(...after.map(t=>t.s));
-  if(to<=from)return{kind:'free'};
-  return{kind:'win',from,to,first:pair===prev+1};
+  return to>from?{from,to,prev}:null;
 }
-function bgtuHalf(part,compact,cur){
+/* Состояние половинки клетки для одной недели: занятия, окно между её парами или свободно.
+   Окно рисуется в первой свободной паре после предыдущей занятой, чтобы не повторяться. */
+function bgtuHalfState(list,dow,pair,maxPair,has){
+  const rows=atPair(list,dow,pair);
+  if(rows.length)return{kind:'class',rows};
+  const win=bgtuWindow(list,dow,pair,maxPair,has);
+  if(!win)return{kind:'free'};
+  return{kind:'win',from:win.from,to:win.to,first:pair===win.prev+1};
+}
+function bgtuHalf(part,cur){
   const tag=part.tag;
   /* Половинка той недели, которая сейчас не идёт, помечается off - её приглушают. */
   const off=(tag==='both'||tag===cur)?'':' off';
@@ -873,15 +899,23 @@ function bgtuHalf(part,compact,cur){
     return `<div class="we win${tag==='even'?' alt':''}${off}"><span>окно</span>`
       +`<b>${bgtuHm(part.from)}–${bgtuHm(part.to)}</b></div>`;
   }
+  const rows=part.rows;
+  /* Параллельные подгруппы делят половинку поровну, и различает их название
+     вместе со скобкой: без неё две строки выглядели бы одинаково. */
+  const keepGroup=rows.length>1;
   return `<div class="we${tag==='both'?' both':(tag==='even'?' alt':'')}${off}">`
-    +part.rows.map(row=>`<details class="bw-lesson"><summary><b>${esc(bgtuShortName(row.subjectId))}</b>`
-      +`<small>${tag==='both'?'Обе недели':bgtuWeekLabel(tag)+' неделя'} · подробнее</small></summary>`
-      +`<dl><dt>Предмет</dt><dd>${esc(subjName(row.subjectId))}</dd>`
-      +`<dt>Время</dt><dd>${esc(row.time||'Не указано')}</dd>`
-      +`<dt>Тип занятия</dt><dd>${esc(row.kind||'Не указан')}</dd>`
-      +`<dt>Преподаватель</dt><dd>${esc(teachName(row.teacherId)||'Не указан')}</dd>`
-      +`<dt>Аудитория</dt><dd>${esc(row.room||'Не указана')}</dd>`
-      +(row.subgroup?`<dt>Подгруппа</dt><dd>${esc(row.subgroup)}</dd>`:'')+`</dl></details>`).join('')
+    +rows.map(row=>{
+      /* Преподаватель — отдельной строкой и всегда: раньше он делил строку с видом
+         и аудиторией, из-за чего уезжал в многоточие, а в неделях-«двойниках»
+         (одна и та же пара обе недели) не показывался вовсе. */
+      const who=bgtuTeacherShort(row.teacherId);
+      const kind=bgtuKindLabel(row.kind);
+      const label=[subjName(row.subjectId),row.time,row.kind,teachName(row.teacherId),row.room,row.subgroup?'Подгруппа '+row.subgroup:''].filter(Boolean).join(' · ');
+      return `<div class="wl" role="group" aria-label="${esc(label)}"><b>${esc(bgtuShortName(row.subjectId,keepGroup))}</b>`
+        +(who?`<span class="t2">${esc(who)}</span>`:'')
+        +`<small class="meta">${kind?`<span class="k">${esc(kind)}</span>`:''}`
+        +(row.room?`<span class="r">${esc(row.room)}</span>`:'')+`</small></div>`;
+    }).join('')
     +`</div>`;
 }
 function bgtuWeekTable(week){
@@ -893,19 +927,22 @@ function bgtuWeekTable(week){
   const cols=[...new Set(all.map(t=>t.dow))].sort((a,b)=>a-b);
   const days=cols.length?cols:[1,2,3,4,5,6];
   const maxPair=all.reduce((m,t)=>Math.max(m,t.pair),0);
-  /* Время в заголовке допустимо только когда оно одинаково во всех ячейках. */
-  const slotByPair={};
-  all.forEach(t=>{
-    (slotByPair[t.pair]??=new Set()).add(String(t.time||''));
-  });
+  /* Время строки — единственное у этого номера пары, и в колонке показывается
+     весь интервал: с какого по какое время пара идёт. Если время разное —
+     это параллельные подгруппы, и одна цифра была бы враньём. */
+  const timesByPair={};
+  all.forEach(t=>{(timesByPair[t.pair]??=new Set()).add(String(t.time||''));});
   const todayDow=dowOf(todayISO());
 
   /* Строки таблицы: настоящие пары и одна свёрнутая строка на пропуск номеров.
-     Схлопывается любая непрерывная серия номеров без занятий — хоть 5–7, хоть одна 4-я. */
+     Схлопывается любая непрерывная серия номеров без занятий — хоть 5–7, хоть одна 4-я.
+     Номер с окном не схлопывается: разрыв во времени исчез бы вместе с ним. */
   const rows=[];
   let skipped=[];
+  const keepsPair=p=>days.some(d=>has(odd,d,p)||has(even,d,p))
+    ||days.some(d=>bgtuWindow(odd,d,p,maxPair,has)||bgtuWindow(even,d,p,maxPair,has));
   for(let p=1;p<=maxPair;p++){
-    if(days.some(d=>has(odd,d,p)||has(even,d,p))){
+    if(keepsPair(p)){
       if(skipped.length){rows.push({skipped});skipped=[];}
       rows.push({pair:p});
     }else skipped.push(p);
@@ -917,9 +954,8 @@ function bgtuWeekTable(week){
     +'<div class="bwside"><ul class="legend">'
     +`<li><span class="lg w${week==='odd'?' cur':''}">н</span>нечётная неделя — половинка сверху</li>`
     +`<li><span class="lg c${week==='even'?' cur':''}">ч</span>чётная неделя — половинка снизу</li>`
-    +'<li><span class="lg gap"></span>окно между парами этой недели</li>'
     +'</ul></div>'
-    +`<div class="bwscroll" tabindex="0" role="region" aria-label="Недельное расписание, прокрутка по горизонтали"><table class="bw" style="--bwcols:${days.length}"><caption class="sr-only">Расписание на нечётную и чётную недели: строки — номера пар, столбцы — дни недели</caption>`
+    +`<div class="bwscroll" tabindex="0" role="region" aria-label="Недельное расписание, прокручивается вбок"><table class="bw" style="--bwcols:${days.length}"><caption class="sr-only">Расписание на нечётную и чётную недели: строки — номера пар, столбцы — дни недели</caption>`
     +'<thead><tr><th class="pcol dhead"><span class="dh-day">день</span><span class="dh-pair">пара</span></th>';
   for(const dow of days){
     const isToday=dow===todayDow;
@@ -941,12 +977,13 @@ function bgtuWeekTable(week){
       return;
     }
     const occ=days.map(d=>has(odd,d,row.pair)||has(even,d,row.pair));
-    const times=slotByPair[row.pair];
-    const slot=times?.size===1?bgtuSlot([...times][0]):null;
+    const times=timesByPair[row.pair];
+    const slot=times&&times.size===1?bgtuSlot([...times][0]):null;
     /* Строка прямо над свёрнутым блоком отдаёт ему свою нижнюю границу. */
     const pre=rows[ri+1]&&rows[ri+1].skipped;
     h+=`<tr${pre?' class="pre"':''}><th class="pcol" scope="row"><b>${row.pair}</b>`
-      +(slot?.s?`<small>${bgtuHm(slot.s)}</small>`:times?.size>1?'<small>разное<br>время</small>':'')+`</th>`;
+      +(slot&&slot.s?`<small>${bgtuHm(slot.s)}<i>${bgtuHm(slot.e)}</i></small>`
+        :times&&times.size>1?'<small>разные<br>времена</small>':'')+`</th>`;
     days.forEach((dow,di)=>{
       const o=bgtuHalfState(odd,dow,row.pair,maxPair,has);
       const e=bgtuHalfState(even,dow,row.pair,maxPair,has);
@@ -970,14 +1007,14 @@ function bgtuWeekTable(week){
         if(prevOcc&&!prevOcc[di])cls.push('et');
       }
       h+=`<td class="${cls.join(' ')}"><div class="wc">`
-        +parts.map(p=>bgtuHalf(p,parts.length===1,week)).join('')
+        +parts.map(p=>bgtuHalf(p,week)).join('')
         +`</div></td>`;
     });
     prevOcc=occ;
     h+='</tr>';
   });
   h+=`</tbody></table></div>`
-    +'<p class="hint">Нажми на занятие, чтобы увидеть полное название, время, преподавателя и аудиторию. На телефоне таблица прокручивается вбок; с клавиатуры — стрелками после перехода к таблице. Подробности открываются Enter или пробелом.</p>';
+    +'<p class="hint">Строки — пары со временем, столбцы — дни. На телефоне таблица прокручивается вбок, колонка с номером пары остаётся на месте.</p>';
   return h;
 }
 

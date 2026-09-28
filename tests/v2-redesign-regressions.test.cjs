@@ -16,14 +16,14 @@ test('login dialog waits for journal read and keeps read errors visible',async()
   }
 });
 test('final render clears the schedule spinner on success and failure',async()=>{
-  const source=app.slice(app.indexOf('async function loadScheduleSnapshot(){'),app.indexOf('async function refreshBGTU(){'));
+  const source=app.slice(app.indexOf('let scheduleRequestId=0;'),app.indexOf('async function refreshBGTU(){'));
   for(const failed of [false,true]){
     const rendered=[];
     const c=vm.createContext({window:{},S:{schedule:{}},scheduleLoading:false,AbortController,setTimeout,clearTimeout,
       fetch:async()=>{if(failed)throw Error('offline');return {ok:true,json:async()=>({ok:true,lessons:[{}],fetchedAt:'2026-09-15T12:00:00Z'})};},
-      render:()=>rendered.push(c.scheduleLoading),save(){},applyBGTUSchedule(){}});
+      validateBGTUSnapshot:data=>data,render:()=>rendered.push(c.scheduleLoading),save(){},applyBGTUSchedule(){c.applied=true;}});
     vm.runInContext(source,c);await c.loadScheduleSnapshot();
-    assert.equal(c.scheduleLoading,false);assert.equal(rendered.at(-1),false);
+    assert.equal(c.scheduleLoading,false);assert.equal(rendered.at(-1),false);assert.equal(!!c.applied,!failed);
   }
 });
 test('editing preserves imported and unfamiliar lesson kinds',async()=>{
