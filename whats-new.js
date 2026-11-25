@@ -38,5 +38,5 @@
   document.addEventListener('click',event=>{
     if(event.target.closest?.('[data-whats-new]'))show(true);
   });
-  window.whatsNewReady=()=>{ready=true;show();};
+  window.whatsNewReady=({ announce = true } = {})=>{ready=true;if(announce)show();};
 })();

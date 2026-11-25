@@ -1,0 +1,5 @@
+/* Only server-owned, explicitly equipped cosmetics change these accents. */
+body[data-club-theme=moss]{--accent:#39734c;--accent-strong:#285b3a;--accent-soft:rgba(57,115,76,.13);--hero-grad:linear-gradient(135deg,#588455,#2d6047);--on-accent:#fff;--on-hero:#fff}
+body[data-club-theme=lilac]{--accent:#8055a8;--accent-strong:#624084;--accent-soft:rgba(128,85,168,.13);--hero-grad:linear-gradient(135deg,#9472b6,#624287);--on-accent:#fff;--on-hero:#fff}
+body[data-club-table=moss] .bw{--line:#93b49a;--line-strong:#638669}
+body[data-club-table=lilac] .bw{--line:#b29bc8;--line-strong:#826a99}

@@ -47,12 +47,21 @@ test('changelog content is text, including HTML payloads',()=>{
   const payload='<img src=x onerror=alert(1)>',s=setup(new Map(),{source:source.replace('Добавлен новый интерфейс приложения.',payload)});
   s.ready();assert.ok(s.elements.some(e=>e.tag==='li'&&e.textContent===payload));assert.ok(!s.elements.some(e=>e.tag==='img'));
 });
-test('both modes expose manual action, load shared module before startup and announce after rendering',()=>{
+test('both modes expose manual action, load shared module before startup and suppress the automatic announcement after rendering',()=>{
   for(const dir of ['','v2/']){
     const app=fs.readFileSync(require.resolve('../'+dir+'app.js'),'utf8');
     const more=app.slice(app.indexOf('function viewMore(){'),app.indexOf('function pairFromTime('));
     assert.ok(more.includes('data-whats-new>Что нового</button>'));
-    const start=app.slice(app.indexOf('async function startApp(){'));assert.ok(start.indexOf('render();')<start.indexOf('window.whatsNewReady?.();'));
+    const start=app.slice(app.indexOf('async function startApp(){'));assert.ok(start.indexOf('render();')<start.indexOf('window.whatsNewReady?.({ announce: false });'));
     const html=fs.readFileSync(require.resolve('../'+dir+'index.html'),'utf8');assert.ok(html.indexOf('whats-new.js')<html.indexOf('<script src="cloud.js'));
   }
+});
+
+test('quiet startup leaves the dialog closed but preserves existing manual help',()=> {
+  const data=new Map(),s=setup(data);
+  s.window.whatsNewReady({announce:false});
+  assert.equal(s.modal.open,false);
+  assert.equal(data.has(key),false);
+  s.manual();
+  assert.equal(s.modal.open,true);
 });

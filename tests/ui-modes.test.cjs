@@ -44,7 +44,7 @@ test('workers only remove their own old caches (root also removes exact legacy n
 test('root precaches both complete interfaces; offline navigation never crosses modes',async()=>{
   for(const file of ['sw.js','v2/sw.js']){
     const w=worker(file);await w.dispatch('install');
-    for(const dir of file==='sw.js'?['','v2/']:['v2/']){
+    for(const dir of file==='sw.js'?['','v2/','club/']:['v2/']){
       const html=read(dir+'index.html');
       for(const [,asset]of html.matchAll(/(?:src|href)="([^"]+)"/g)){
         if(!/^(https?:|#)/.test(asset))assert.ok(w.added.includes(new URL(asset,w.origin+dir).href),asset);

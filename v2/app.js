@@ -527,6 +527,7 @@ function viewMore(){
   const editor=window.cloudCanEdit?.();
   return head('Ещё') + `</header>
     <ul class="grouplist">
+      ${window.cloudHasSession?.()?`<li><a class="lesson" href="../club/?from=new"><span class="t"><b>Игровой клуб</b><span>Искры, бесплатные награды и личная коллекция</span></span><span class="go" aria-hidden="true">›</span></a></li>`:''}
       ${guest?`<li><button class="lesson" type="button" data-act="cloudlogin"><span class="t"><b>Войти как староста</b>
         <span>ключ доступа открывает журнал группы</span></span><span class="go" aria-hidden="true">›</span></button></li>`:''}
       <li><button class="lesson" type="button" data-act="goimport"><span class="t"><b>Сканировать и импортировать</b>
@@ -715,10 +716,65 @@ function importBGTUSchedule(data,state){
   return {made,addedSubjects,addedTeachers};
 }
 
+const PUBLIC_SCHEDULE_KEY = 'starosta-public-schedule-v1';
+function sanitizePublicSchedule(data){
+  const valid=validateBGTUSnapshot(data);
+  return {
+    ok:true,
+    source:typeof valid.source==='string'?valid.source:'БГТУ',
+    group:String(valid.group||'').trim(),
+    currentWeek:valid.currentWeek==='even'?'even':'odd',
+    ...(valid.period?{period:String(valid.period)}:{}) ,
+    fetchedAt:valid.fetchedAt,
+    ...(valid.contentHash?{contentHash:String(valid.contentHash)}:{}) ,
+    lessons:valid.lessons.slice(0,200).map(r=>({
+      week:r.week==='even'?'even':'odd',
+      dow:+r.dow,
+      ...(r.pair!=null?{pair:+r.pair}:{}) ,
+      time:String(r.time||'').trim(),
+      subject:String(r.subject||'').trim(),
+      kind:String(r.kind||'').trim(),
+      teacher:String(r.teacher||'').trim(),
+      room:String(r.room||'').trim(),
+      ...(r.subgroup?{subgroup:String(r.subgroup).trim()}:{})
+    }))
+  };
+}
+function readPublicScheduleCache(){
+  try{
+    if(typeof localStorage!=='object'||!localStorage)return null;
+    const raw=localStorage.getItem(PUBLIC_SCHEDULE_KEY);
+    if(!raw||raw.length>262144)return null;
+    return validateBGTUSnapshot(JSON.parse(raw));
+  }catch{
+    try{localStorage.removeItem(PUBLIC_SCHEDULE_KEY);}catch{}
+    return null;
+  }
+}
+function writePublicScheduleCache(data){
+  try{
+    if(typeof localStorage!=='object'||!localStorage)return;
+    const clean=sanitizePublicSchedule(data);
+    const json=JSON.stringify(clean);
+    if(json.length<=262144)localStorage.setItem(PUBLIC_SCHEDULE_KEY,json);
+  }catch{}
+}
 let scheduleRequestId=0;
 async function loadScheduleSnapshot(){
   if(window.cloudScheduleBlocked?.())return;
   const targetState=S, requestId=++scheduleRequestId;
+  const cached=typeof readPublicScheduleCache==='function'?readPublicScheduleCache():null;
+  if(cached&&!(Date.parse(cached.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))){
+    const sameCached=cached.contentHash?cached.contentHash===S.schedule?.contentHash:cached.fetchedAt===S.schedule?.fetchedAt;
+    if(typeof cached.group==='string'&&cached.group.trim())S.group=S.schedule.group=cached.group.trim();
+    publicBgtuSnapshot=JSON.parse(JSON.stringify(cached));
+    if(!sameCached||!(S.tpl||[]).some(t=>t.source==='bgtu'))applyBGTUSchedule(cached);
+    S.schedule.fetchedAt=cached.fetchedAt;
+    S.schedule.lastSyncAt=new Date(cached.fetchedAt).toLocaleString('ru-RU');
+    S.schedule.contentHash=cached.contentHash||null;
+    S.schedule.lastError='';
+    if(typeof render==='function')render();
+  }
   async function load(url,viaSupabase=false){
     const ac=new AbortController();const timer=viaSupabase?null:setTimeout(()=>ac.abort(),20000);
     try{
@@ -735,7 +791,9 @@ async function loadScheduleSnapshot(){
     if(window.STAROSTA_SUPABASE_URL){
       try{data=await load('/functions/v1/fetch-schedule',true);}
       catch{data=await load('../schedule.json');}
-    }else data=await load('../schedule.json');
+    }else{
+      data=await load('../schedule.json');
+    }
     if(S!==targetState||requestId!==scheduleRequestId||window.cloudScheduleBlocked?.())return;
     if(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))return;
     const same=data.contentHash?data.contentHash===S.schedule?.contentHash:data.fetchedAt===S.schedule?.fetchedAt;
@@ -743,6 +801,7 @@ async function loadScheduleSnapshot(){
     // Снимок держим в памяти: после входа и фонового обновления журнала
     // расписание восстанавливается из него, а не из чужого облачного состояния.
     publicBgtuSnapshot=JSON.parse(JSON.stringify(data));
+    if(typeof writePublicScheduleCache==='function')writePublicScheduleCache(data);
     if(!same)applyBGTUSchedule(data);
     S.schedule.fetchedAt=data.fetchedAt;
     S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');
@@ -750,7 +809,10 @@ async function loadScheduleSnapshot(){
     S.schedule.lastError='';
     save();
   }catch{
-    if(S===targetState&&requestId===scheduleRequestId)S.schedule.lastError='Нет публичного расписания. Показываю сохранённое.';
+    if(S===targetState&&requestId===scheduleRequestId){
+      const hasSaved=(S.tpl||[]).some(t=>t.source==='bgtu')&&S.schedule?.fetchedAt;
+      S.schedule.lastError=hasSaved?'Нет сети. Показаны сохранённые данные.':'Нет публичного расписания. Показываю сохранённое.';
+    }
   }finally{
     if(S===targetState&&requestId===scheduleRequestId){scheduleLoading=false;render();}
   }
@@ -771,6 +833,8 @@ async function refreshBGTU(){
     if(S!==targetState||window.cloudScheduleBlocked?.())return;
     validateBGTUSnapshot(data);
     if(!(Date.parse(data.fetchedAt)<Date.parse(S.schedule?.fetchedAt||''))){
+      publicBgtuSnapshot=JSON.parse(JSON.stringify(data));
+      if(typeof writePublicScheduleCache==='function')writePublicScheduleCache(data);
       if(!data.contentHash||data.contentHash!==S.schedule?.contentHash)applyBGTUSchedule(data);
       S.schedule.fetchedAt=data.fetchedAt;S.schedule.contentHash=data.contentHash||null;
       S.schedule.lastSyncAt=new Date(data.fetchedAt).toLocaleString('ru-RU');S.schedule.lastError='';save();
@@ -1590,7 +1654,7 @@ async function startApp(){
   await window.cloudInit();
   render();
   measure();
-  window.whatsNewReady?.();
+  window.whatsNewReady?.({ announce: false });
   if(window.ResizeObserver) new ResizeObserver(measureSoon).observe($('nav'));
   setTimeout(measure, 300);
   if('serviceWorker' in navigator && window.isSecureContext){

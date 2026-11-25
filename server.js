@@ -1,6 +1,9 @@
 'use strict';
 
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const { URL } = require('node:url');
 
 const HOST = process.env.HOST || '127.0.0.1';
@@ -16,7 +19,10 @@ const DEFAULTS = {
 };
 const UA = 'Starosta-BGTU/10 (+https://www.tu-bryansk.ru/education/schedule/)';
 const CACHE_TTL_MS = 60_000;
+const STALE_AFTER_MS = 6 * 3600_000;
+const MAX_CACHE_ENTRIES = 20;
 const scheduleCache = new Map();
+const inflightRequests = new Map();
 
 const DAY_MAP = {
   воскресенье: 0,
@@ -243,24 +249,168 @@ function mockSchedule() {
   return { ok:true, source:'БГТУ (MOCK)', group:DEFAULTS.group, currentWeek:'odd', lessons, fetchedAt:new Date().toISOString(), cached:false, mock:true };
 }
 
-async function getSchedule(params) {
-  if (process.env.MOCK_BGTU === '1') return mockSchedule();
-  const cfg = {
-    group: params.group || DEFAULTS.group,
-    faculty: params.faculty || DEFAULTS.faculty,
-    level: params.level || DEFAULTS.level,
-    period: params.period || DEFAULTS.period,
-    form: params.form || DEFAULTS.form
+function badRequest(message) {
+  const err = new Error(message);
+  err.status = 400;
+  return err;
+}
+
+function cleanParam(value, fallback, label, maxLen = 120) {
+  if (value == null || value === '') return fallback;
+  const str = String(value);
+  if (/[\u0000-\u001f\u007f<>]/.test(str)) throw badRequest(`Некорректный параметр ${label}`);
+  const trimmed = str.trim();
+  if (trimmed.length > maxLen) throw badRequest(`Слишком длинный параметр ${label}`);
+  return trimmed || fallback;
+}
+
+function hasControlChars(value) {
+  return /[\u0000-\u001f\u007f]/.test(String(value));
+}
+
+function cleanField(value, maxLen = 180) {
+  return String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function validateScheduleSnapshot(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (!Array.isArray(raw.lessons) || raw.lessons.length < 1 || raw.lessons.length > 200) return null;
+  const fetchedMs = Date.parse(raw.fetchedAt || '');
+  if (!Number.isFinite(fetchedMs)) return null;
+  if (raw.currentWeek != null && raw.currentWeek !== 'odd' && raw.currentWeek !== 'even') return null;
+
+  for (const field of [raw.source, raw.group, raw.period]) {
+    if (field != null && hasControlChars(field)) return null;
+  }
+
+  const lessons = [];
+  for (const item of raw.lessons) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    if (item.week !== 'odd' && item.week !== 'even') return null;
+    const dow = Number(item.dow);
+    if (!Number.isInteger(dow) || dow < 0 || dow > 7) return null;
+    let pair;
+    if (item.pair != null) {
+      pair = Number(item.pair);
+      if (!Number.isInteger(pair) || pair < 1 || pair > 10) return null;
+    }
+    for (const field of [item.time, item.subject, item.kind, item.teacher, item.room, item.subgroup]) {
+      if (field != null && hasControlChars(field)) return null;
+    }
+    const time = cleanField(item.time, 40);
+    const subject = cleanField(item.subject, 200);
+    if (!time || !subject) return null;
+    const lesson = {
+      week: item.week,
+      dow,
+      ...(pair != null ? { pair } : {}),
+      time,
+      subject,
+      kind: cleanField(item.kind, 120),
+      teacher: cleanField(item.teacher, 120),
+      room: cleanField(item.room, 80)
+    };
+    const subgroup = cleanField(item.subgroup, 60);
+    if (subgroup) lesson.subgroup = subgroup;
+    lessons.push(lesson);
+  }
+
+  const group = cleanField(raw.group, 80);
+  const currentWeek = raw.currentWeek === 'even' ? 'even' : 'odd';
+  const period = cleanField(raw.period, 60);
+  const source = cleanField(raw.source, 80) || 'БГТУ';
+  const fetchedAt = new Date(fetchedMs).toISOString();
+  const contentHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ group, currentWeek, period, lessons }))
+    .digest('hex');
+
+  return {
+    ok: true,
+    source,
+    group,
+    currentWeek,
+    ...(period ? { period } : {}),
+    lessons,
+    fetchedAt,
+    contentHash
   };
-  if(!cfg.group.trim())throw new Error('Задайте GROUP в переменных окружения');
-  const cacheKey = JSON.stringify(cfg);
-  const cached = scheduleCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return { ...cached.data, cached: true };
+}
+
+function scheduleCachePath() {
+  if (process.env.SCHEDULE_CACHE_FILE) return path.resolve(process.env.SCHEDULE_CACHE_FILE);
+  const baseDir = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : path.join(__dirname, 'local-private');
+  return path.join(baseDir, 'bgtu-schedule-cache.json');
+}
+
+function readSnapshotFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size > 512 * 1024) return null;
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return validateScheduleSnapshot(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function writeDiskScheduleCache(snapshot) {
+  const valid = validateScheduleSnapshot(snapshot);
+  if (!valid) throw new Error('Некорректный снимок расписания для сохранения');
+  const targetPath = scheduleCachePath();
+  const dir = path.dirname(targetPath);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const tmpPath = `${targetPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  const fd = fs.openSync(tmpPath, 'w', 0o600);
+  try {
+    fs.writeSync(fd, JSON.stringify(valid, null, 2), 0, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  try {
+    fs.renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch {}
+    throw err;
+  }
+  return valid;
+}
+
+function pruneMemoryCache() {
+  while (scheduleCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = scheduleCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    scheduleCache.delete(oldestKey);
+  }
+}
+
+function fallbackScheduleSnapshot(requestedGroup, cacheKey) {
+  const mem = cacheKey ? scheduleCache.get(cacheKey) : null;
+  if (mem?.data) {
+    return { ...mem.data, cached: true, stale: Date.now() - mem.at >= CACHE_TTL_MS, cacheSource: 'memory' };
+  }
+  const disk = readSnapshotFile(scheduleCachePath());
+  if (disk && (!requestedGroup || !disk.group || disk.group === requestedGroup)) {
+    const stale = Date.now() - Date.parse(disk.fetchedAt) >= STALE_AFTER_MS;
+    return { ...disk, cached: true, stale, cacheSource: 'disk' };
+  }
+  const bundled = readSnapshotFile(path.join(__dirname, 'schedule.json'));
+  if (bundled && (!requestedGroup || !bundled.group || bundled.group === requestedGroup)) {
+    return { ...bundled, cached: true, stale: true, cacheSource: 'bundled' };
+  }
+  return null;
+}
+
+async function fetchLiveSchedule(cfg, rawParams) {
   const jar = { cookie: '' };
 
   const page = await fetchText(`${BASE}?form=${encodeURIComponent(cfg.form)}`, { method: 'GET' }, jar);
   const currentWeek = parseCurrentWeek(page.text);
-  if (!params.period) {
+  if (!rawParams?.period) {
     const periodSelect = page.text.match(/<select\b[^>]*id=["']period["'][^>]*>([\s\S]*?)<\/select>/i);
     const selected = periodSelect?.[1].match(/<option\b([^>]*\bselected[^>]*)>/i);
     const currentPeriod = selected && attr(selected[1], 'value');
@@ -283,14 +433,81 @@ async function getSchedule(params) {
 
   const lessons = parseSchedule(scheduleResp.text, currentWeek);
   if (!lessons.length) throw new Error('БГТУ вернуло расписание, но распарсить занятия не удалось');
-  const data = { ok: true, source: 'БГТУ', group: cfg.group, currentWeek, period: cfg.period, lessons, fetchedAt: new Date().toISOString(), cached: false };
-  scheduleCache.set(cacheKey, { at: Date.now(), data });
-  return data;
+  const validated = validateScheduleSnapshot({
+    ok: true,
+    source: 'БГТУ',
+    group: cfg.group,
+    currentWeek,
+    period: cfg.period,
+    lessons,
+    fetchedAt: new Date().toISOString()
+  });
+  if (!validated) throw new Error('Снимок расписания БГТУ не прошёл проверку');
+  return validated;
+}
+
+async function getSchedule(params = {}) {
+  if (process.env.MOCK_BGTU === '1') return mockSchedule();
+  const rawParams = params && typeof params === 'object' ? params : {};
+  const defaultGroup = DEFAULTS.group || process.env.GROUP || '';
+  const cfg = {
+    group: cleanParam(rawParams.group, defaultGroup, 'group', 80),
+    faculty: cleanParam(rawParams.faculty, DEFAULTS.faculty, 'faculty', 160),
+    level: cleanParam(rawParams.level, DEFAULTS.level, 'level', 80),
+    period: cleanParam(rawParams.period, DEFAULTS.period, 'period', 60),
+    form: cleanParam(rawParams.form, DEFAULTS.form, 'form', 60)
+  };
+  const usesDefaultSchedule = cfg.group === defaultGroup &&
+    ['faculty', 'level', 'period', 'form'].every(dimension =>
+      rawParams[dimension] == null || rawParams[dimension] === ''
+    );
+
+  const cacheKey = JSON.stringify(cfg);
+  const cached = scheduleCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return { ...cached.data, cached: true, stale: false };
+
+  if (!cfg.group) {
+    const fb = usesDefaultSchedule ? fallbackScheduleSnapshot('', cacheKey) : null;
+    if (fb) return fb;
+    throw new Error('Не задана переменная GROUP (например О-26-ИСТ-сии-Б)');
+  }
+
+  if (inflightRequests.has(cacheKey)) {
+    return await inflightRequests.get(cacheKey);
+  }
+
+  if (inflightRequests.size >= MAX_CACHE_ENTRIES) {
+    const fallback = usesDefaultSchedule ? fallbackScheduleSnapshot(cfg.group, cacheKey) : cached?.data;
+    if (fallback) return { ...fallback, cached: true, stale: true };
+    throw Object.assign(new Error('Сервис расписания занят. Повторите запрос позже.'), { status: 503 });
+  }
+
+  const job = (async () => {
+    try {
+      const data = await fetchLiveSchedule(cfg, rawParams);
+      pruneMemoryCache();
+      scheduleCache.set(cacheKey, { at: Date.now(), data });
+      if (usesDefaultSchedule) {
+        try { writeDiskScheduleCache(data); } catch {}
+      }
+      return { ...data, cached: false, stale: false };
+    } catch (err) {
+      const fb = usesDefaultSchedule ? fallbackScheduleSnapshot(cfg.group, cacheKey) :
+        cached?.data && { ...cached.data, cached: true, stale: true, cacheSource: 'memory' };
+      if (fb) return { ...fb, fallbackError: err?.message || 'Ошибка БГТУ' };
+      throw err;
+    } finally {
+      inflightRequests.delete(cacheKey);
+    }
+  })();
+
+  inflightRequests.set(cacheKey, job);
+  return await job;
 }
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Length': Buffer.byteLength(body) });
   res.end(body);
 }
 
@@ -304,6 +521,12 @@ function server() {
       if (req.method === 'GET' && url.pathname === '/api/bgtu/schedule') {
         const data = await getSchedule(Object.fromEntries(url.searchParams.entries()));
         return json(res, 200, data);
+      }
+      if (req.method === 'GET' && url.pathname === '/schedule.json') {
+        try {
+          const data = await getSchedule({});
+          return json(res, 200, data);
+        } catch {}
       }
       if (req.method === 'GET') {
         const fs = require('node:fs');
@@ -346,13 +569,14 @@ function server() {
           if (!fs.existsSync(full) && url.pathname==='/data/curriculum.json'){res.writeHead(204,{'Cache-Control':'no-store'});return res.end();}
           if (!fs.existsSync(full)) return json(res, 404, { ok:false, error:`Файл ${item[0]} не найден` });
           const file = fs.readFileSync(full);
-          res.writeHead(200, { 'Content-Type': item[1], 'Cache-Control': item[0].endsWith('sw.js') ? 'no-store' : 'no-cache' });
+          res.writeHead(200, { 'Content-Type': item[1], 'Cache-Control': item[0].endsWith('sw.js') ? 'no-store' : 'no-cache', 'X-Content-Type-Options': 'nosniff' });
           return res.end(file);
         }
       }
       json(res, 404, { ok: false, error: 'Not found' });
     } catch (e) {
-      json(res, 502, { ok: false, error: e?.message || 'Ошибка сервера' });
+      const status = Number.isInteger(e?.status) && e.status >= 400 && e.status < 600 ? e.status : 502;
+      json(res, status, { ok: false, error: e?.message || 'Ошибка сервера' });
     }
   });
   s.listen(PORT, HOST, () => console.log(`Starosta BGTU: http://${HOST}:${PORT}`));
@@ -411,4 +635,4 @@ if (require.main === module) {
   else server();
 }
 
-module.exports = { parseSchedule, findSelectedGroup, parseCurrentWeek, cleanText, getSchedule };
+module.exports = { parseSchedule, findSelectedGroup, parseCurrentWeek, cleanText, getSchedule, validateScheduleSnapshot, writeDiskScheduleCache, readSnapshotFile, scheduleCachePath };

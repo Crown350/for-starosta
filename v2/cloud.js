@@ -91,8 +91,8 @@
     token=keyInput.value.trim();keyInput.value='';status('Проверяю ключ…');
     const err=document.getElementById('cloud-error');
     dlg.setAttribute('aria-busy','true');
-    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;await pull();if(loginEpoch===sessionEpoch)dlg.close('ok');}
-    catch(error){if(loginEpoch!==sessionEpoch)return;token='';ready=false;usePublicSchedule=true;S=keepBgtu(fresh());permissions();render();err.textContent=error.message;err.hidden=false;keyInput.focus();}
+    try{const session=await api('/api/session');usePublicSchedule=session.usePublicSchedule!==false;status('Загружаю журнал…');err.hidden=true;await pull();if(loginEpoch===sessionEpoch){dlg.close('ok');}}
+    catch(error){if(loginEpoch!==sessionEpoch)return;token='';ready=false;usePublicSchedule=true;S=keepBgtu(fresh());permissions();render();status('Вход старосты');err.textContent=error.message;err.hidden=false;keyInput.focus();}
     finally{if(loginEpoch===sessionEpoch)dlg.removeAttribute('aria-busy');}
   };
   document.getElementById('cloud-pull').onclick=async()=>{if(writing)return status('Дождись завершения сохранения');if(dirty&&!await askConfirm('Заменить несохранённые изменения облачной версией? Сначала можно скачать их.'))return;try{await pull();}catch(e){status(e.message);}};

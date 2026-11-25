@@ -28,5 +28,14 @@
   "v2/dialogs.js",
   "v2/sw.js",
   "v2/manifest.webmanifest",
-  "whats-new.js"
+  "whats-new.js",
+  "club/index.html",
+  "club/app.js",
+  "club/styles.css",
+  "club/games.js",
+  "club/fairness.js",
+  "club/appearance.js",
+  "club/appearance.css",
+  "club/legal.js",
+  "club/ux.js"
 ]

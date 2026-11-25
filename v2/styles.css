@@ -97,6 +97,8 @@ h2:first-child{margin-top:6px}
 small{color:var(--ink-soft)}
 
 button{touch-action:manipulation;font:inherit;color:inherit}
+a{color:var(--accent)}
+a[target="_blank"]{white-space:nowrap}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible{
   outline:3px solid var(--accent);outline-offset:2px;border-radius:4px;
 }
@@ -245,7 +247,7 @@ textarea{min-height:140px;resize:vertical;line-height:1.45}
 .lesson{
   display:flex;align-items:center;gap:11px;cursor:pointer;min-height:44px;width:100%;
   background:none;border:0;padding:2px 0;text-align:left;font:inherit;color:inherit;
-  border-radius:var(--r-sm);
+  text-decoration:none;border-radius:var(--r-sm);
 }
 .pairno{
   min-width:46px;flex:none;text-align:left;
