@@ -1,7 +1,10 @@
 /* Game club client: renders server state; never decides a reward or a price. */
 (()=>{
   'use strict';
-  const scriptSrc=document.currentScript.src,apiBase=new URL('../api/game-club/',scriptSrc).href;
+  const scriptSrc=document.currentScript.src;
+  const hostedApi=document.querySelector?.('meta[name="starosta-club-api"]')?.content;
+  const apiBase=hostedApi||new URL('../api/game-club/',scriptSrc).href;
+  let hostedAccessKey='';
   const labels={theme:'Темы',frame:'Рамки профиля',badge:'Значки',table:'Оформление таблицы',sound:'Звуки',card:'Рубашки карт',wheel:'Оформление кругов',animation:'Анимации'};
   const messages={UNAUTHORIZED:'Войди по ключу доступа.',ACCESS_KEY_REQUIRED:'Доступ к клубу открыт только после входа по ключу доступа.',ACCESS_KEY_INVALID:'Неверный или отозванный ключ доступа.',ACCESS_KEYS_NOT_CONFIGURED:'На сервере ещё не настроены ключи доступа.',INSUFFICIENT_SPARKS:'Пока не хватает Искр. Бесплатные награды помогут собрать коллекцию.',ALREADY_OWNED:'Этот предмет уже в инвентаре.',NO_TICKET:'Сначала получи бесплатный билет.',TICKET_NOT_READY:'Следующий билет пока не доступен.',RATE_LIMIT:'Слишком много запросов. Подожди минуту и повтори.',EVENT_CLOSED:'Этот прогноз завершён.',EVENT_OPEN:'Результат появится после завершения события.',ALREADY_PREDICTED:'Твой вариант уже сохранён.',ALREADY_CLAIMED:'Награда уже получена.',KEY_CONFLICT:'Ключ запроса уже использован для другого действия.',NOT_OWNED:'Предмет ещё не принадлежит тебе.'};
   const queryParams=typeof location==='object'&&location.href?new URL(location.href).searchParams:null;
@@ -23,7 +26,11 @@
   async function api(path,{body,key}={}){
     const headers=body?{'Content-Type':'application/json','Idempotency-Key':key||uuid()}:{};
     if(state&&path!=='session')headers['X-Club-Account']=state.account;
-    const response=await fetch(apiBase+path,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers,body:body?JSON.stringify(body):undefined,signal:typeof AbortSignal==='function'&&AbortSignal.timeout?AbortSignal.timeout(10000):undefined});
+    if(hostedApi&&hostedAccessKey&&path!=='access')headers['X-Club-Key']=hostedAccessKey;
+    if(hostedApi&&!hostedAccessKey&&path==='state'){
+      throw Object.assign(Error('ACCESS_KEY_REQUIRED'),{code:'ACCESS_KEY_REQUIRED',status:401});
+    }
+    const response=await fetch(apiBase+path,{method:body?'POST':'GET',credentials:hostedApi?'omit':'same-origin',cache:'no-store',headers,body:body?JSON.stringify(body):undefined,signal:typeof AbortSignal==='function'&&AbortSignal.timeout?AbortSignal.timeout(10000):undefined});
     let data;try{data=await response.json();}catch{throw Object.assign(Error('UNAVAILABLE'),{code:'UNAVAILABLE'});}
     if(!response.ok)throw Object.assign(Error(data.error||'UNAVAILABLE'),{code:data.error,status:response.status});return data;
   }
@@ -57,11 +64,11 @@
     const submit=el('button',busy?'Проверяем…':'Открыть клуб','btn wide');submit.type='submit';submit.disabled=busy;
     const journalLink=el('a','Войти через журнал','btn ghost wide');journalLink.href=new URL(fromNew?'../v2/':'../',scriptSrc).href;journalLink.onclick=()=>saveMode(fromNew?'new':'old');
     append(form,append(el('div',undefined,'field'),kl,keyInput),submit,journalLink,el('small','Ключ проверяется сервером и не сохраняется в браузере.','hint'));root.append(form);
-    form.onsubmit=async e=>{e.preventDefault();if(busy)return;const accessKey=keyInput.value.trim();keyInput.value='';if(!accessKey){error='Введи ключ доступа.';render();return;}busy=true;error='';notice='';submit.disabled=true;try{await api('access',{body:{accessKey}});generation++;legalView='terms';soundEnabled=false;window.ClubGames?.reset();await loadState();restore();notice='Добро пожаловать в клуб';}catch(err){state=null;accessRequired=true;apply();error=messages[err.code]||'Не удалось проверить ключ доступа. Повтори позже.';}finally{busy=false;render();}};
+    form.onsubmit=async e=>{e.preventDefault();if(busy)return;const accessKey=keyInput.value.trim();keyInput.value='';if(!accessKey){error='Введи ключ доступа.';render();return;}busy=true;error='';notice='';submit.disabled=true;try{await api('access',{body:{accessKey}});if(hostedApi)hostedAccessKey=accessKey;generation++;legalView='terms';soundEnabled=false;window.ClubGames?.reset();await loadState();restore();notice='Добро пожаловать в клуб';}catch(err){state=null;accessRequired=true;apply();error=messages[err.code]||'Не удалось проверить ключ доступа. Повтори позже.';}finally{busy=false;render();}};
   }
   async function loadState(){state=await api('state');accessRequired=false;apply();}
-  async function logout(){if(busy)return;busy=true;try{await api('access-logout',{body:{}});generation++;window.ClubGames?.reset();animation=null;revealedItem=null;selectedItem=null;legalView='terms';soundEnabled=false;state=null;accessRequired=true;page='home';notice='Ты вышел из клуба';apply();}catch{error='Не удалось выйти. Проверь соединение.';}finally{busy=false;render();}}
-  async function refresh(){if(busy)return;busy=true;error='';render();try{await loadState();}catch(e){if(e.code==='ACCESS_KEY_REQUIRED'||e.status===401||e.status===403||e.status===404||e.code==='UNAVAILABLE'){state=null;accessRequired=true;apply();}error=e.code==='ACCESS_KEY_REQUIRED'||e.status===401?'':(messages[e.code]||'Нет соединения. Баланс обновится после подключения.');}finally{busy=false;render();}}
+  async function logout(){if(busy)return;busy=true;try{if(hostedApi)hostedAccessKey='';else await api('access-logout',{body:{}});generation++;window.ClubGames?.reset();animation=null;revealedItem=null;selectedItem=null;legalView='terms';soundEnabled=false;state=null;accessRequired=true;page='home';notice='Ты вышел из клуба';apply();}catch{error='Не удалось выйти. Проверь соединение.';}finally{busy=false;render();}}
+  async function refresh(){if(busy)return;busy=true;error='';render();try{await loadState();}catch(e){if(e.code==='ACCESS_KEY_REQUIRED'||e.status===401||e.status===403||e.status===404||e.code==='UNAVAILABLE'){if(e.status===401)hostedAccessKey='';state=null;accessRequired=true;apply();}error=e.code==='ACCESS_KEY_REQUIRED'||e.status===401?'':(messages[e.code]||'Нет соединения. Баланс обновится после подключения.');}finally{busy=false;render();}}
   async function command(body,retry=false){
     if(busy||!state||state.legal?.required)return;if(pending&&!retry){error='Сначала проверь результат предыдущего запроса.';render();return;}
     const p=retry?pending:{body,key:uuid(),account:state.account};if(p.account!==state.account)return;
@@ -72,7 +79,7 @@
       window.ClubGames?.accept(result.receipt,result.replayed);if(body.type==='buy'&&!result.replayed)revealedItem=body.itemId;
       if(!result.replayed){if(body.type==='spin')window.ClubUI?.haptic?.(result.receipt.reward?.rare?'win':'reward');else if(['buy','transfer'].includes(body.type))window.ClubUI?.haptic?.('win');else if(['ticket','welcome','claim','equip'].includes(body.type))window.ClubUI?.haptic?.('reward');}
       if(soundEnabled&&(body.type==='spin'||result.receipt.round?.status==='settled'))playSound();return result;
-    }catch(e){window.ClubUI?.haptic?.('error');if(e.status&&e.status!==429&&e.status!==401&&e.status<500){pending=null;persist(null);}if(e.status===401){state=null;accessRequired=true;apply();}if(e.code==='TERMS_REQUIRED'||e.code==='TERMS_CHANGED')await refreshLegal();error=e.status===401?'Сессия клуба изменилась. Войди снова по ключу доступа, затем проверь сохранённый запрос.':messages[e.code]||window.ClubGames?.message(e.code)||'Ответ не получен. Подключись и повтори запрос с сохранённым ключом.';notice='';}finally{busy=false;render();if(notice&&!error){const note=notice;setTimeout(()=>{if(notice===note&&!error){notice='';root.querySelector?.('.club-status')?.replaceChildren();}},2800);}if(animation)setTimeout(()=>{animation=null;render();},2200);}
+    }catch(e){window.ClubUI?.haptic?.('error');if(e.status&&e.status!==429&&e.status!==401&&e.status<500){pending=null;persist(null);}if(e.status===401){hostedAccessKey='';state=null;accessRequired=true;apply();}if(e.code==='TERMS_REQUIRED'||e.code==='TERMS_CHANGED')await refreshLegal();error=e.status===401?'Сессия клуба изменилась. Войди снова по ключу доступа, затем проверь сохранённый запрос.':messages[e.code]||window.ClubGames?.message(e.code)||'Ответ не получен. Подключись и повтори запрос с сохранённым ключом.';notice='';}finally{busy=false;render();if(notice&&!error){const note=notice;setTimeout(()=>{if(notice===note&&!error){notice='';root.querySelector?.('.club-status')?.replaceChildren();}},2800);}if(animation)setTimeout(()=>{animation=null;render();},2200);}
   }
   function home(){
     const intro=append(el('div',undefined,'club-heading'),append(el('div'),el('span','ВРЕМЯ ДЛЯ ИГРЫ','eyebrow'),el('h1','Твой следующий ход'),el('p','Четыре игры. Своя коллекция. Одна команда.','hint')),state.reserved>0?append(el('div',undefined,'club-reserve'),icon('spark'),el('span','Резерв '+state.reserved+' Искр')):null);root.append(intro);

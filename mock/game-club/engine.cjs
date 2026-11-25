@@ -10,21 +10,37 @@ function selectReward(rewards,draw){
   let end=0;for(const r of rewards){end+=r.weight;if(draw<end)return r;}throw Error('Invalid weights');
 }
 class Engine{
-  constructor({file,now=Date.now,draw,economy=config,write,secretFactory=()=>crypto.randomBytes(32).toString('hex')}={}){
-    this.config=structuredClone(validate(economy));this.file=file;this.now=now;this.draw=draw;this.secretFactory=secretFactory;this.queue=Promise.resolve();this.limits=new Map();
-    this.data=file&&fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{version:1,users:{},events:{}};
+  constructor({file,now=Date.now,draw,economy=config,write,initialState,profiles=null,limits,secretFactory=()=>crypto.randomBytes(32).toString('hex')}={}){
+    this.config=structuredClone(validate(economy));this.file=file;this.now=now;this.draw=draw;this.secretFactory=secretFactory;this.queue=Promise.resolve();this.limits=limits||new Map();this.profiles=profiles;
+    this.data=initialState!==undefined?structuredClone(initialState):
+      file&&fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{version:1,users:{},events:{}};
     if(this.data.version!==1)throw Error('Unsupported state');
     this.write=write||((data)=>{if(!file)return;fs.mkdirSync(path.dirname(file),{recursive:true});const tmp=file+'.tmp';const fd=fs.openSync(tmp,'w',0o600);try{fs.writeFileSync(fd,JSON.stringify(data));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,file);});
     this.economy=new Economy(this);this.economy.init(this.data);this.economy.check(this.data);
   }
   locked(fn){const task=this.queue.then(fn);this.queue=task.catch(()=>{});return task;}
-  user(data,id){if(!Object.hasOwn(FIXTURES,id))fail('UNAUTHORIZED',401);return data.users[id]||(data.users[id]={name:FIXTURES[id],createdAt:this.now()-8*86400000,reserved:0,welcome:false,balance:0,tickets:0,lastTicket:null,streak:0,misses:0,owned:[],equipped:{},history:[],operations:{},predictions:{}});}
+  profile(data,id){
+    if(this.profiles){
+      if(Object.hasOwn(data.users,id))return data.users[id];
+      return this.profiles.get(id);
+    }
+    return Object.hasOwn(FIXTURES,id)?{name:FIXTURES[id],createdAt:this.now()-8*86400000}:undefined;
+  }
+  user(data,id){
+    const profile=this.profile(data,id);
+    if(!profile)fail('UNAUTHORIZED',401);
+    return data.users[id]||(data.users[id]={
+      name:profile.name,createdAt:profile.createdAt,reserved:0,welcome:false,balance:0,
+      tickets:0,lastTicket:null,streak:0,misses:0,owned:[],equipped:{},history:[],
+      operations:{},predictions:{}
+    });
+  }
   event(data,time){const slot=Math.floor(time/this.config.predictionDurationMs),id='garden-'+slot;if(!data.events[id])data.events[id]={id,title:'Какой фонарь зажжётся в воображаемом саду?',options:['Янтарный','Сиреневый'],closesAt:(slot+1)*this.config.predictionDurationMs,result:crypto.randomInt(2)};return data.events[id];}
   snapshot(data,id){const u=this.user(data,id),time=this.now(),e=this.event(data,time);const events=Object.values(data.events).filter(e=>e.id===this.event(data,time).id||u.predictions[e.id]).map(e=>({...e,result:time>=e.closesAt?e.result:null,selection:u.predictions[e.id]?.choice??null,claimed:!!u.predictions[e.id]?.claimed}));
     const rare=this.config.rewards.filter(r=>r.rare),guaranteed=u.misses>=this.config.pity-1;
     if(!u.giftRound||data.rounds[u.giftRound]?.status!=='prepared')u.giftRound=this.economy.seedRound(data,id,'gift').id;
     const rooms=Object.values(data.rooms).filter(r=>r.members.some(m=>m.user===id)).map(r=>({...r,members:r.members.map(m=>({...m,name:this.user(data,m.user).name})),round:this.economy.publicRound(data.rounds[r.roundId])}));
-    return {account:id,name:u.name,createdAt:u.createdAt,mock:true,balance:u.balance,reserved:u.reserved,welcome:u.welcome,transfers:{...this.config.transfers,used:this.economy.limits(data,id)},games:this.config.games,rounds:Object.values(data.rounds).filter(r=>r.owner===id&&r.game!=='team21').slice(-30).map(r=>this.economy.publicRound(r)),rooms,ledger:data.ledger.filter(l=>l.account===id).slice(-100).reverse(),giftRound:this.economy.publicRound(data.rounds[u.giftRound]),tickets:u.tickets,streak:u.streak,misses:u.misses,pity:this.config.pity,serverTime:time,nextTicketAt:u.lastTicket===null?time:u.lastTicket+this.config.ticketIntervalMs,owned:u.owned,equipped:u.equipped,history:u.history.slice(-50).reverse(),catalogue:this.config.catalogue,events,probabilities:this.config.rewards.map(r=>({...r,probability:guaranteed?(r.rare?r.weight/rare.reduce((n,r)=>n+r.weight,0):0):r.weight/10000})),guaranteed};
+    return {account:id,name:u.name,createdAt:u.createdAt,mock:!this.profiles,balance:u.balance,reserved:u.reserved,welcome:u.welcome,transfers:{...this.config.transfers,used:this.economy.limits(data,id)},games:this.config.games,rounds:Object.values(data.rounds).filter(r=>r.owner===id&&r.game!=='team21').slice(-30).map(r=>this.economy.publicRound(r)),rooms,ledger:data.ledger.filter(l=>l.account===id).slice(-100).reverse(),giftRound:this.economy.publicRound(data.rounds[u.giftRound]),tickets:u.tickets,streak:u.streak,misses:u.misses,pity:this.config.pity,serverTime:time,nextTicketAt:u.lastTicket===null?time:u.lastTicket+this.config.ticketIntervalMs,owned:u.owned,equipped:u.equipped,history:u.history.slice(-50).reverse(),catalogue:this.config.catalogue,events,probabilities:this.config.rewards.map(r=>({...r,probability:guaranteed?(r.rare?r.weight/rare.reduce((n,r)=>n+r.weight,0):0):r.weight/10000})),guaranteed};
   }
   state(id){return this.locked(()=>{const data=structuredClone(this.data);this.user(data,id);for(const room of Object.values(data.rooms))if(['waiting','active'].includes(room.status)){const m=room.members.find(m=>m.user===id);if(m){m.online=true;m.lastSeen=this.now();}}this.economy.sweep(data);const result=this.snapshot(data,id);this.economy.check(data);this.write(data);this.data=data;return result;});}
   tick(){return this.locked(()=>{const data=structuredClone(this.data);if(this.economy.sweep(data)){this.economy.check(data);this.write(data);this.data=data;}});}

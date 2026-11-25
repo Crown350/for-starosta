@@ -68,7 +68,7 @@ class Economy{
     }return changed;
   }
   limits(data,id){const now=this.e.now(),entries=data.ledger.filter(l=>l.account===id&&l.kind==='transfer-out');return {daily:entries.filter(l=>l.at>now-86400000).reduce((n,l)=>n-l.delta,0),weekly:entries.filter(l=>l.at>now-604800000).reduce((n,l)=>n-l.delta,0)};}
-  transferCheck(data,id,recipient,amount){const c=this.e.config.transfers,u=this.e.user(data,id);if(!c.enabled)fail('TRANSFERS_DISABLED');if(id===recipient)fail('SELF_TRANSFER');if(!Object.hasOwn(FIXTURES,recipient))fail('RECIPIENT_NOT_FOUND',404);
+  transferCheck(data,id,recipient,amount){const c=this.e.config.transfers,u=this.e.user(data,id);if(!c.enabled)fail('TRANSFERS_DISABLED');if(id===recipient)fail('SELF_TRANSFER');if(!this.e.profile(data,recipient))fail('RECIPIENT_NOT_FOUND',404);
     const target=this.e.user(data,recipient);if(this.e.now()-u.createdAt<c.minAccountAgeMs||this.e.now()-target.createdAt<c.minAccountAgeMs)fail('ACCOUNT_TOO_NEW');
     if(!Number.isSafeInteger(amount)||amount<1||amount>c.maxAmount)fail('INVALID_AMOUNT',400);const used=this.limits(data,id);if(used.daily+amount>c.daily||used.weekly+amount>c.weekly)fail('TRANSFER_LIMIT');if(u.balance<amount)fail('INSUFFICIENT_SPARKS');return target;
   }
