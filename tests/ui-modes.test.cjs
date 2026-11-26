@@ -9,7 +9,7 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 test('mode preference redirects inside the repository subpath and tolerates unavailable storage',()=>{
   for(const current of ['old','new'])for(const saved of [null,'old','new','invalid'])for(const blocked of [false,true]){
     const redirects=[],writes=[];let click;
-    const c={URL,Object,document:{currentScript:{src:'https://example.test/for-starosta/ui-mode.js'},addEventListener:(type,fn)=>click=fn},
+    const c={URL,URLSearchParams,Object,document:{currentScript:{src:'https://example.test/for-starosta/ui-mode.js'},addEventListener:(type,fn)=>click=fn},
       location:{pathname:'/for-starosta/'+(current==='new'?'v2/':''),replace:url=>redirects.push(url)},
       localStorage:{getItem(){if(blocked)throw Error('blocked');return saved;},setItem:(...args)=>{if(blocked)throw Error('blocked');writes.push(args);}}};
     vm.runInNewContext(read('ui-mode.js'),c);
@@ -70,4 +70,21 @@ test('switch is outside editor-only markup; v2 shares resources and journal form
   assert.ok(manifest.icons.every(i=>i.src.startsWith('../icon-')));
   const old=read('app.js'),newer=read('v2/app.js');
   assert.equal(old.match(/const KEY\s*=\s*[^;]+;/)[0],newer.match(/const KEY\s*=\s*[^;]+;/)[0]);
+});
+
+test('explicit return to either design overrides stale preference and preserves other URL fields',()=>{
+  for(const [mode,dir] of [['old',''],['new','v2/']]){
+    const base='https://example.test/for-starosta/';
+    const href=base+dir+'?ui='+mode+'&keep=1#section';
+    const writes=[],redirects=[],replacements=[];
+    vm.runInNewContext(read('ui-mode.js'),{
+      URL,URLSearchParams,Object,document:{currentScript:{src:base+'ui-mode.js'},addEventListener(){}},
+      location:{href,pathname:new URL(href).pathname,search:new URL(href).search,replace:url=>redirects.push(url)},
+      localStorage:{getItem:()=>mode==='old'?'new':'old',setItem:(...args)=>writes.push(args)},
+      history:{state:null,replaceState:(_state,_title,url)=>replacements.push(url)}
+    });
+    assert.deepEqual(redirects,[]);
+    assert.deepEqual(writes,[['starosta-ui-mode',mode]]);
+    assert.deepEqual(replacements,[base+dir+'?keep=1#section']);
+  }
 });

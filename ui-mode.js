@@ -3,9 +3,19 @@
   const root = new URL('./', document.currentScript.src);
   const modes = {old: root, new: new URL('v2/', root)};
   const current = location.pathname.startsWith(modes.new.pathname) ? 'new' : 'old';
+  const requested = new URLSearchParams(location.search).get('ui');
+  const explicit = requested === current;
   let saved;
-  try { saved = localStorage.getItem('starosta-ui-mode'); } catch (_) {}
-  if (Object.hasOwn(modes, saved) && saved !== current) {
+  try {
+    if (explicit) localStorage.setItem('starosta-ui-mode', current);
+    saved = localStorage.getItem('starosta-ui-mode');
+  } catch (_) {}
+  if (explicit && typeof history !== 'undefined') {
+    const url = new URL(location.href);
+    url.searchParams.delete('ui');
+    history.replaceState(history.state, '', url.href);
+  }
+  if (!explicit && Object.hasOwn(modes, saved) && saved !== current) {
     location.replace(modes[saved].href);
   }
   document.addEventListener('click', event => {

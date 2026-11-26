@@ -216,7 +216,7 @@ test('club/app.js has no test login form, locks behind ACCESS_KEY_REQUIRED and o
   assert.ok(root.textContent.includes('Твой следующий ход'));
   assert.equal(root.textContent.includes('Открой свою коллекцию'), false);
   assert.equal(sessionStore.size, 0);
-  assert.equal(localStore.size, 0);
+  assert.deepEqual([...localStore], [['starosta-ui-mode', 'new']]);
 });
 
 test('Starosta viewMore hides Club link for guests and displays it after access-key login', () => {

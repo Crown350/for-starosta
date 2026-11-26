@@ -89,7 +89,7 @@ test('allowLan permits local interface host and same-origin requests while block
 });
 test('club DOM uses text nodes for hostile values and no unsafe URLs or monetary mechanisms',()=>{
   const source=fs.readFileSync(require.resolve('../club/app.js'),'utf8');assert.doesNotMatch(source,/innerHTML|insertAdjacentHTML|Math\.random/);assert.doesNotMatch(source,/казино|ставк|букмекер|депозит|вывод денег|джекпот|stripe|paypal|bitcoin|payment|checkout/i);
-  assert.equal((source.match(/localStorage/g)||[]).length,1);assert.match(source,/localStorage\.setItem\('starosta-ui-mode',mode\)/);
+  assert.deepEqual([...source.matchAll(/localStorage\.(?:getItem|setItem)\('([^']+)'/g)].map(m=>m[1]),['starosta-ui-mode','starosta-ui-mode']);
   // Execute the real renderer against a small DOM, not a second implementation.
   class Node{constructor(tag){this.tag=tag;this.children=[];this.dataset={};this.isConnected=true;this.attrs={};}append(...n){this.children.push(...n);}replaceChildren(){this.children=[];}setAttribute(k,v){this.attrs[k]=v;}querySelector(){return null;}get textContent(){return this.text??this.children.map(n=>n.textContent).join(' ');}set textContent(s){this.text=String(s);} }
   const body=new Node('body');body.dataset.screen='gameclub';const head=new Node('head'),root=new Node('main'),hostile='<img src=x onerror=alert(1)>';
@@ -100,7 +100,7 @@ test('club DOM uses text nodes for hostile values and no unsafe URLs or monetary
 });
 test('classic changes only one menu entry; shared assets exclude backend and compact design is preserved',()=>{
   const {execFileSync}=require('node:child_process'),root=path.resolve(__dirname,'..'),baseline=file=>execFileSync('git',['show','origin/main:'+file],{cwd:root,encoding:'utf8'}).replace(/\r\n/g,'\n');
-  for(const file of ['dialogs.js','ui-mode.js','cloud-server.js','config.js','package.json'])assert.equal(fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n/g,'\n'),baseline(file),file);
+  for(const file of ['dialogs.js','cloud-server.js','config.js','package.json'])assert.equal(fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n/g,'\n'),baseline(file),file);
   for(const file of ['app.js','v2/app.js'])assert.ok(fs.readFileSync(path.join(root,file),'utf8').includes(file==='app.js'?'href="club/?from=old"':'href="../club/?from=new"'),file);
   const files=require('../site-files.json');for(const file of ['club/index.html','club/app.js','club/games.js','club/styles.css','club/fairness.js'])assert.ok(files.includes(file));assert.ok(!files.some(f=>/mock|tests|local-private|\.env|\.cjs/.test(f)));
 });
