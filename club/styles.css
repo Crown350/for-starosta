@@ -2428,3 +2428,88 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   .club-main-nav::-webkit-scrollbar { display:none; }
   .club-main-nav .btn { flex:0 0 auto; min-width:56px; padding:5px 8px; }
 }
+
+/* Match the classic journal's glass surfaces and blue palette in the club. */
+body[data-club-ui=old] {
+  color-scheme:light;
+  --club-bg:#eaf0f7;
+  --club-surface:rgba(255,255,255,.68);
+  --club-raised:#f7faff;
+  --club-line:rgba(13,38,60,.18);
+  --club-text:#0d1a24;
+  --club-muted:#485e70;
+  --club-accent:#14618f;
+  --club-accent-ink:#fff;
+  --club-rare:#66469b;
+  --club-danger:#a02f29;
+  --club-radius:22px;
+  --club-shadow:0 10px 30px -8px rgba(13,40,60,.22);
+  --club-surface-tint:#edf5fc;
+  --club-chrome:rgba(235,243,251,.96);
+  --club-error-surface:#ffedea;
+  min-height:100dvh;
+  background:radial-gradient(ellipse at 16% 0%, #bdd7ed 0, transparent 52%),
+    linear-gradient(160deg,#eef2f7,#dbe8f4 65%,#dcece9);
+  background-attachment:fixed;
+}
+body[data-club-ui=old][data-club-theme=moss] { --club-accent:#12694f; }
+body[data-club-ui=old][data-club-theme=lilac] { --club-accent:#65468e; }
+
+@media(prefers-color-scheme:dark) {
+  body[data-club-ui=old] {
+    color-scheme:dark;
+    --club-bg:#0c1620;
+    --club-surface:rgba(31,46,62,.88);
+    --club-raised:#24394d;
+    --club-line:rgba(171,200,228,.27);
+    --club-text:#eaf1f7;
+    --club-muted:#afc4d5;
+    --club-accent:#82c7f1;
+    --club-accent-ink:#0c2436;
+    --club-rare:#d4b7fd;
+    --club-danger:#ffb0a3;
+    --club-shadow:0 12px 30px -8px rgba(0,0,0,.55);
+    --club-surface-tint:#1d3346;
+    --club-chrome:rgba(18,31,44,.96);
+    --club-error-surface:#442c31;
+    background:radial-gradient(ellipse at 16% 0%,#203c57 0,transparent 52%),
+      linear-gradient(160deg,#10202e,#0a131c 72%);
+    background-attachment:fixed;
+  }
+  body[data-club-ui=old][data-club-theme=moss] { --club-accent:#81d8c5; }
+  body[data-club-ui=old][data-club-theme=lilac] { --club-accent:#beacff; }
+}
+
+[data-club-ui=old] :is(h1,.club-brand) {
+  font-family:inherit;
+  font-weight:750;
+  letter-spacing:-.025em;
+}
+[data-club-ui=old] :is(.card,.club-game-tile,.club-team-banner,.club-game-panel) {
+  background:var(--club-surface);
+  border-color:var(--club-line);
+  border-radius:var(--club-radius);
+  box-shadow:var(--club-shadow);
+}
+[data-club-ui=old] :is(.club-topbar,.club-main-nav) { background:var(--club-chrome); }
+[data-club-ui=old] .club-main-nav { border-color:var(--club-line); }
+[data-club-ui=old] .club-game-art { color:var(--club-accent); }
+[data-club-ui=old] .club-art-icon { filter:none; transform:none; }
+[data-club-ui=old] :is(.club-game-tile,.club-tile-numbers,.club-tile-multiplier) .club-art-label,
+[data-club-ui=old] .btn.ghost { background:var(--club-raised); color:var(--club-text); border-color:var(--club-line); }
+[data-club-ui=old] .btn:not(.ghost):hover:not(:disabled) { filter:brightness(.92); background:var(--club-accent); }
+[data-club-ui=old] :is(.btn.ghost:hover:not(:disabled),.btn[aria-current=page],.btn[aria-pressed=true]) {
+  background:var(--club-surface-tint);
+  color:var(--club-accent);
+  border-color:var(--club-accent);
+}
+[data-club-ui=old] :is(.club input,.club select,.club textarea,.club-result,.club-status,.club-dialog) {
+  background:var(--club-raised);
+  color:var(--club-text);
+  border-color:var(--club-line);
+}
+[data-club-ui=old] .club-status.club-error {
+  color:var(--club-danger);
+  background:var(--club-error-surface);
+  border-color:var(--club-danger);
+}

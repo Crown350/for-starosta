@@ -47,10 +47,12 @@ test('club entry persists explicitly selected design and direct return uses the 
   fromClassic.window.GameClub.mount(fromClassic.root);
   await flush();
   assert.equal(modeStorage.get('starosta-ui-mode'),'old');
+  assert.equal(fromClassic.document.body.dataset.clubUi,'old');
   assert.equal(fromClassic.all().find(n=>n.className==='club-back').href,'http://127.0.0.1:8790/?ui=old');
   modeStorage.set('starosta-ui-mode','new');
   const direct=harness({modeStorage});
   direct.window.GameClub.mount(direct.root);
   await flush();
+  assert.equal(direct.document.body.dataset.clubUi,'new');
   assert.equal(direct.all().find(n=>n.className==='club-back').href,'http://127.0.0.1:8790/v2/?ui=new');
 });

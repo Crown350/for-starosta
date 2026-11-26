@@ -50,7 +50,7 @@
   }
   function mounted(){return root?.isConnected&&document.body.dataset.screen==='gameclub';}
   function render(){
-    if(!mounted())return;document.body.dataset.clubMotion=reduceMotion?'reduced':'normal';
+    if(!mounted())return;document.body.dataset.clubUi=journalMode;document.body.dataset.clubMotion=reduceMotion?'reduced':'normal';
     const focus=document.activeElement?.dataset.clubFocus||root.dataset.clubReturnFocus;root.replaceChildren();root.className='wrap club';root.setAttribute('aria-busy',String(busy));if(state?.legal?.required){agreement();return;}
     const head=el('header',undefined,'club-topbar'),brand=append(el('div',undefined,'club-brand'),icon('spark'),el('div','Игровой клуб'));
     const back=el('a',undefined,'club-back');back.setAttribute('aria-label','К журналу');append(back,icon('arrow'),el('span','К журналу'));back.href=journalUrl(journalMode);back.onclick=()=>saveMode(journalMode);
